@@ -4,16 +4,21 @@
 #include <cstddef>
 #include <cstdint>
 
+// HID Constants
+#define HID_USAGE_GEN_DESKTOP 0x01
+#define HID_USAGE_GEN_DESKTOP_UNDEFINED 0x00
+#define HID_END_COLLECTION 0xC0
+
 // clang-format off
 static const uint8_t hid_report_desc[] = {
-    0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
-    0x09, 0x00,        // Usage (Undefined)
-    0xA1, 0x01,        // Collection (Application)
-    0x09, 0x00,        // asage (Undefined)
-    0x75, 0x08,        //   Report Size (8)
-    0x95, 0x40,        //   Report Count (60)
-    0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-    0xC0,              // End Collection
+	HID_USAGE_PAGE(HID_USAGE_GEN_DESKTOP),
+	HID_USAGE(HID_USAGE_GEN_DESKTOP_UNDEFINED),
+	HID_COLLECTION(HID_COLLECTION_APPLICATION),
+		HID_USAGE(HID_USAGE_GEN_DESKTOP_UNDEFINED),
+		HID_REPORT_SIZE(8),
+		HID_REPORT_COUNT(64),
+		HID_INPUT(0x02),
+	HID_END_COLLECTION,
 };
 // clang-format on
 

@@ -1,6 +1,7 @@
 #include "HID.h"
 
 #include <cstring>
+#include <Arduino.h>
 
 HIDDevice::HIDDevice() {
     if (initialized) {
@@ -21,7 +22,12 @@ uint16_t HIDDevice::_onGetDescriptor(uint8_t *buffer) {
 }
 
 bool HIDDevice::send(const uint8_t *value, size_t size) {
-    return HID.SendReport(0, value, size);
+    // Only attempt send if HID is actually ready to prevent error spam
+    if (!HID.ready()) {
+        return false;
+    }
+    // Use shorter timeout to prevent blocking when USB is congested
+    return HID.SendReport(0, value, size, 10);
 }
 
 bool HIDDevice::ready() {

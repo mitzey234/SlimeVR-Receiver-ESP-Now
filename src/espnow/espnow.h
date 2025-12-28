@@ -10,56 +10,105 @@
 #include <functional>
 #include <vector>
 
-class ESPNowCommunication {
+class ESPNowCommunication
+{
 public:
-    static constexpr size_t packetSizeBytes = 16;
+        static constexpr size_t packetSizeBytes = 240;
 
-    static ESPNowCommunication &getInstance();
+        static unsigned int channel;
 
-    ErrorCodes begin();
+        const static unsigned int maxPPS = 500; // Maximum packets per second total across all trackers
 
-    void enterPairingMode();
-    void exitPairingMode();
-    bool isInPairingMode();
+        static ESPNowCommunication &getInstance();
 
-    void onTrackerPaired(std::function<void()> callback);
-    void onTrackerConnected(
-            std::function<void(uint8_t, const uint8_t *)> callback);
-    void onPacketReceived(
-            std::function<void(const uint8_t data[packetSizeBytes])> callback);
+        ErrorCodes begin();
+
+        void enterPairingMode();
+        void exitPairingMode();
+        bool isInPairingMode();
+        
+        void disconnectAllTrackers();
+        bool disconnectSingleTracker(const uint8_t mac[6]);
+        void sendUnpairToAllTrackers();
+        void sendUnpairToTracker(const uint8_t mac[6]);
+        bool isTrackerIdConnected(uint8_t trackerId) const;
+
+        void update();
+
+        void onTrackerPaired(std::function<void()> callback);
+        void onTrackerConnected(
+            std::function<void(const uint8_t *)> callback);
+        void onTrackerDisconnected(
+            std::function<void(uint8_t)> callback);  // Passes tracker ID
+        
+        size_t getConnectedTrackerCount() const;
+        bool getTrackerMacByIndex(size_t index, uint8_t mac[6]) const;
+        uint8_t securityCode[8];
 
 private:
-    ESPNowCommunication() = default;
+        ESPNowCommunication() = default;
 
-    void invokeTrackerPairedEvent();
-    void invokeTrackerConnectedEvent(uint8_t trackerId,
-                                     const uint8_t *trackerMacAddress);
-    void invokePacketReceivedEvent(const uint8_t data[packetSizeBytes]);
+        void invokeTrackerPairedEvent();
+        void invokeTrackerConnectedEvent(const uint8_t *trackerMacAddress);
+        void invokeTrackerDisconnectedEvent(uint8_t trackerId);
+        void sendRateUpdateToAllTrackers();
 
-    void handleMessage(const esp_now_recv_info_t *senderInfo,
-                       const uint8_t *data,
-                       int dataLen);
+        void __attribute__((hot)) __attribute__((flatten)) handleMessage(const esp_now_recv_info_t *senderInfo,
+                           const uint8_t *data,
+                           int dataLen);
 
-    bool addPeer(const uint8_t peerMac[6]);
-    bool deletePeer(const uint8_t peerMac[6]);
+        uint8_t addPeer(const uint8_t peerMac[6]);
+        uint8_t addPeer(const uint8_t peerMac[6], uint8_t channel);
+        bool deletePeer(const uint8_t peerMac[6]);
+        inline bool isTrackerConnected(const uint8_t peerMac[6]);
 
-    static ESPNowCommunication instance;
+        static ESPNowCommunication instance;
 
-    bool pairing = false;
+        bool pairing = false;
+        
+        // Heartbeat tracking structure
+        struct TrackerHeartbeat {
+            std::array<uint8_t, 6> mac;
+            uint8_t trackerId;
+            unsigned long lastPingSent = 0;
+            unsigned long pingStartTime = 0;
+            bool waitingForResponse = false;
+            uint8_t missedPings = 0;
+            uint8_t latency = 0;
+            uint16_t expectedSequenceNumber = 0;
+            int8_t rssi = 0;  // Signal strength in dBm
+        };
 
-    std::vector<std::function<void()>> trackerPairedCallbacks;
-    std::vector<std::function<void(uint8_t, const uint8_t *)>>
+        unsigned int recievedPacketCount = 0;
+
+        unsigned int recievedByteCount = 0;
+
+        unsigned long lastStatsReport = 0;
+        
+        // Store connected tracker MAC addresses with heartbeat tracking
+        std::vector<TrackerHeartbeat> connectedTrackers;
+        
+        static constexpr unsigned long heartbeatInterval = 1000; // 1 second
+        static constexpr unsigned long heartbeatTimeout = 1000; // 1 second timeout
+        static constexpr uint8_t maxMissedPings = 3;
+
+        std::vector<std::function<void()>> trackerPairedCallbacks;
+        std::vector<std::function<void(const uint8_t *)>>
             trackerConnectedCallbacks;
-    std::vector<std::function<void(const uint8_t data[packetSizeBytes])>>
-            packetReceivedCallbacks;
+        std::vector<std::function<void(uint8_t)>>
+            trackerDisconnectedCallbacks;
 
-    static constexpr uint8_t broadcastAddress[6]{0xff,
-                                                 0xff,
-                                                 0xff,
-                                                 0xff,
-                                                 0xff,
-                                                 0xff};
-    static constexpr uint8_t espnowWifiChannel = 1;
+        static constexpr uint8_t broadcastAddress[6]{0xff,
+                                                     0xff,
+                                                     0xff,
+                                                     0xff,
+                                                     0xff,
+                                                     0xff};
+        static constexpr uint8_t espnowWifiChannel = 6;
 
-    friend void onReceive(const esp_now_recv_info_t *, const uint8_t *, int);
+        unsigned long lastPairingBroadcast = 0;
+        unsigned long lastHeartbeatCheck = 0;
+        static constexpr unsigned long pairingBroadcastInterval = 500;
+
+        friend void onReceive(const esp_now_recv_info_t *, const uint8_t *, int);
 };

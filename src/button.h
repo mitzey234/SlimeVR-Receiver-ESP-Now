@@ -34,8 +34,8 @@ private:
 
     uint32_t circularBuffer{0};
 
-    static constexpr float longPressSeconds{2.0f};
-    static constexpr float multiPressMaxDelaySeconds{1.0f};
+    static constexpr float longPressSeconds{5.0f};
+    static constexpr float multiPressMaxDelaySeconds{0.125f};
 
     friend void button_isr();
 };

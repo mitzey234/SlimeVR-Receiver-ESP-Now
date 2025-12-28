@@ -25,4 +25,9 @@ static const bool LED_ACTIVE_LEVEL = true;
 static const uint8_t USER_BUTTON = 0;
 static const bool USER_BUTTON_ACTIVE_LEVEL = false;
 
+// Boot mode pin - when pulled low, prevents USB/HID initialization
+// D1 on ESP32-S2 is typically GPIO5
+static const uint8_t BOOT_MODE_PIN = 5;
+static const bool BOOT_MODE_ACTIVE_LEVEL = false; // Active LOW (pulled down)
+
 #endif /* Pins_Arduino_h */

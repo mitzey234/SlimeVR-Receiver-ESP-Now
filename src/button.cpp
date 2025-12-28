@@ -32,7 +32,7 @@ void Button::update() {
             return;
         }
 
-        if (pressCount > 1) {
+        if (pressCount >= 1) {
             invokeMultiPressCallbacks(pressCount);
         }
 

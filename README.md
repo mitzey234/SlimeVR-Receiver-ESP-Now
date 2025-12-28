@@ -35,6 +35,6 @@ If you press and hold the pair button on the dongle for more than 5 seconds, it 
 
 ## Errors
 
-In case something goes wrong, theres not a lot of debuggibng information available apart from the serial console.
+In case something goes wrong, theres not a lot of debugging information available apart from the serial console.
 
 That being said don't expect me to provide very much support for this project, as I made it as a proof of concept that hopefully others can build upon to perhaps create ESP-now support for SlimeVR ESP based trackers.

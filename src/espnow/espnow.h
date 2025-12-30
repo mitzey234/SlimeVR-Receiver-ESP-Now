@@ -17,7 +17,7 @@ public:
 
         static unsigned int channel;
 
-        const static unsigned int maxPPS = 500; // Maximum packets per second total across all trackers
+        const static unsigned int maxPPS = 1500; // Maximum packets per second total across all trackers
 
         static ESPNowCommunication &getInstance();
 
@@ -47,6 +47,8 @@ public:
 
 private:
         ESPNowCommunication() = default;
+
+        esp_now_rate_config_t rate_config;
 
         void invokeTrackerPairedEvent();
         void invokeTrackerConnectedEvent(const uint8_t *trackerMacAddress);
@@ -90,7 +92,7 @@ private:
         
         static constexpr unsigned long heartbeatInterval = 1000; // 1 second
         static constexpr unsigned long heartbeatTimeout = 1000; // 1 second timeout
-        static constexpr uint8_t maxMissedPings = 3;
+        static constexpr uint8_t maxMissedPings = 5;
 
         std::vector<std::function<void()>> trackerPairedCallbacks;
         std::vector<std::function<void(const uint8_t *)>>

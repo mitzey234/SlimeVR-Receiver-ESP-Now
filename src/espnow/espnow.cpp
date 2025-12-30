@@ -65,9 +65,13 @@ ErrorCodes ESPNowCommunication::begin()
 
     WiFi.mode(WIFI_STA);
     WiFi.setChannel(channel);
-    WiFi.setTxPower(WIFI_POWER_15dBm);
-    esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11N);
+    WiFi.setTxPower(WIFI_POWER_21dBm);
+    esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11G);
     esp_wifi_set_ps(WIFI_PS_NONE);
+
+    rate_config.phymode = WIFI_PHY_MODE_HT20;
+    rate_config.rate = WIFI_PHY_RATE_MCS7_SGI;
+    rate_config.ersu = false;
 
     if (esp_now_init() != ESP_OK)
     {
@@ -437,12 +441,12 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
     {
         // Fast MAC lookup for connected tracker
         const uint8_t *mac = senderInfo->src_addr;
-        for (const auto &tracker : connectedTrackers)
+        for (auto &tracker : connectedTrackers)
         {
             if (*reinterpret_cast<const uint32_t *>(tracker.mac.data()) == *reinterpret_cast<const uint32_t *>(mac) &&
                 *reinterpret_cast<const uint16_t *>(tracker.mac.data() + 4) == *reinterpret_cast<const uint16_t *>(mac + 4))
             {
-
+                if (tracker.waitingForResponse) tracker.missedPings = 0;
                 // Send heartbeat response with the same sequence number
                 ESPNowHeartbeatResponseMessage response;
                 response.sequenceNumber = message->heartbeatEcho.sequenceNumber;
@@ -504,6 +508,8 @@ uint8_t ESPNowCommunication::addPeer(const uint8_t peerMac[6])
     if (result != ESP_OK)
     {
         Serial.printf("Failed to add peer, error: %d\n", result);
+    } else {
+        esp_now_set_peer_rate_config(peer.peer_addr, &rate_config);
     }
     return result;
 }

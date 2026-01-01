@@ -37,12 +37,17 @@ void Configuration::forEachPairedTracker(std::function<void(const uint8_t mac[6]
 }
 
 void Configuration::setWifiChannel(uint8_t channel) {
+    auto result = WiFi.setChannel(channel);
+        if (result != 0) {
+        Serial.printf("[Config] Failed to set WiFi channel to %d - error %d\n", channel, result);
+        return;
+    }
     auto file = LittleFS.open(wifiChannelPath, "w", true);
     file.write(&channel, 1);
     file.close();
-    WiFi.setChannel(channel);
     ESPNowCommunication::channel = channel;
     Serial.printf("[Config] WiFi channel set to %d and saved to %s\n", channel, wifiChannelPath);
+    ESPNowCommunication::getInstance().disconnectAllTrackers();
 }
 
 uint8_t Configuration::getWifiChannel() {

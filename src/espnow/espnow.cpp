@@ -65,7 +65,7 @@ ErrorCodes ESPNowCommunication::begin()
 
     WiFi.mode(WIFI_STA);
     WiFi.setChannel(channel);
-    WiFi.setTxPower(WIFI_POWER_21dBm);
+    WiFi.setTxPower(WIFI_POWER_17dBm);
     esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11G);
     esp_wifi_set_ps(WIFI_PS_NONE);
 
@@ -554,6 +554,8 @@ void ESPNowCommunication::update()
             {
                 tracker.missedPings++;
                 tracker.waitingForResponse = false;
+                Serial.printf("Missed heartbeat from tracker " MACSTR " (ID: %d), missed count: %d\n",
+                              MAC2ARGS(tracker.mac.data()), tracker.trackerId, tracker.missedPings);
 
                 // Send timed out status on second missed heartbeat
                 if (tracker.missedPings == 2)

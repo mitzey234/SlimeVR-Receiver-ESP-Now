@@ -54,7 +54,6 @@ void ConsoleCommandHandler::update() {
                     int ch = chStr.toInt();
                     if (ch >= 1 && ch <= 14) {
                         Configuration::getInstance().setWifiChannel((uint8_t)ch);
-                        ESPNowCommunication::getInstance().disconnectAllTrackers();
                         Serial.printf("[CMD] WiFi channel set to %d and saved.\n", ch);
                     } else {
                         Serial.println("[CMD] Invalid channel. Use 1-14.");
@@ -89,8 +88,15 @@ void ConsoleCommandHandler::update() {
                         } else {
                             Serial.println("[CMD] Invalid MAC address format. Use XX:XX:XX:XX:XX:XX");
                         }
+                } else if (serialBuffer.equalsIgnoreCase("reboot") || serialBuffer.equalsIgnoreCase("restart")) {
+                    Serial.println("[CMD] Rebooting device...");
+                    delay(100);
+                    ESP.restart();
+                } else if (serialBuffer.equalsIgnoreCase("getchannel")) {
+                    int ch = WiFi.channel();
+                    Serial.printf("[CMD] Current WiFi channel: %d\n", ch);
                 } else {
-                    Serial.println("[CMD] Unknown command. Available: factoryreset, setsecurity <16hex>, setchannel <num>");
+                    Serial.println("[CMD] Unknown command. Available: factoryreset, setsecurity <16hex>, setchannel <num>, getchannel, reboot");
                 }
             }
             serialBuffer = "";

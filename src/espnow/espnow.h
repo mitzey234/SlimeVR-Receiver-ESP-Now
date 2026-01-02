@@ -76,6 +76,9 @@ class ESPNowCommunication {
 
         bool pairing = false;
 
+        bool sendRateUpdateNextTick = false;
+        unsigned long lastRateUpdateTime = 0;
+
         unsigned int recievedPacketCount = 0;
         unsigned int recievedByteCount = 0;
         unsigned long lastStatsReport = 0;
@@ -97,6 +100,26 @@ class ESPNowCommunication {
         unsigned long lastPairingBroadcast = 0;
         unsigned long lastHeartbeatCheck = 0;
         static constexpr unsigned long pairingBroadcastInterval = 500;
+
+        // Send queue for rate limiting
+        struct PendingMessage {
+            uint8_t peerMac[6];
+            uint8_t data[ESP_NOW_MAX_DATA_LEN];
+            size_t dataLen;
+            Tracker* tracker;  // Pointer to associated tracker for updating ping info
+        };
+        static constexpr size_t maxQueueSize = 64;
+        PendingMessage sendQueue[maxQueueSize];
+        size_t queueHead = 0;
+        size_t queueTail = 0;
+        int queueSize() const {
+            return queueHead == queueTail ? 0 : (queueHead > queueTail ? ((maxQueueSize - queueHead) + queueTail) : (queueTail - queueHead));
+        }
+        unsigned long lastSendTime = 0;
+        static constexpr unsigned long sendRateLimit = 5;
+        void queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker);
+        void queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen);
+        void processSendQueue();
 
         std::string espNowErrorToString(esp_err_t error);
 };

@@ -6,6 +6,9 @@ namespace SlimeVR
   {
     void Logger::setTag(const char *tag)
     {
+      if (m_Tag != nullptr) {
+        free(m_Tag);
+      }
       m_Tag = (char *)malloc(strlen(tag) + 1);
       strcpy(m_Tag, tag);
     }

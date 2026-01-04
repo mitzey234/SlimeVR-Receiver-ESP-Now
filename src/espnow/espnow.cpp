@@ -10,7 +10,6 @@
 #define MACSTR "%02x:%02x:%02x:%02x:%02x:%02x"
 #define MAC2ARGS(mac) mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
 
-#include <esp_heap_caps.h>
 
 // Static member definition
 unsigned int ESPNowCommunication::channel = 6;
@@ -578,7 +577,7 @@ void ESPNowCommunication::update() {
         const int8_t avgRssi = trackerCount > 0 ? totalRssi / trackerCount : 0;
 
         // Use shorter format to reduce blocking time
-        Serial.printf("T:%d|L:%d/%dms|RSSI:%d/%ddBm|PPS:%d|BPS:%d|Q:%d|FreeHeap:%d|FreeInternal:%d|MinimumFreeHeap:%d\n", trackerCount, avgLatency, highestLatency, avgRssi, maxRssi, pps, bytesPerSecond, queueSize(), esp_get_free_heap_size(), esp_get_free_internal_heap_size(), esp_get_minimum_free_heap_size());
+        Serial.printf("T:%d|L:%d/%dms|RSSI:%d/%ddBm|PPS:%d|BPS:%d|Q:%d\n", trackerCount, avgLatency, highestLatency, avgRssi, maxRssi, pps, bytesPerSecond, queueSize());
     }
 
     // PRIORITY 4: Process send queue - rate limiting to prevent ESP_ERR_ESPNOW_NO_MEM
@@ -618,6 +617,7 @@ std::string ESPNowCommunication::espNowErrorToString(esp_err_t error) {
 
 // Adds a ESP-Now peer with the given MAC address
 uint8_t ESPNowCommunication::addPeer(const uint8_t peerMac[6]) {
+    Serial.printf("Adding peer " MACSTR "\n", MAC2ARGS(peerMac));
     // Check if peer already exists
     if (esp_now_is_peer_exist(peerMac)) {
         Serial.printf("Peer " MACSTR " already exists.\n", MAC2ARGS(peerMac));
@@ -642,6 +642,7 @@ uint8_t ESPNowCommunication::addPeer(const uint8_t peerMac[6]) {
 
 // Deletes a ESP-Now peer with the given MAC address
 bool ESPNowCommunication::deletePeer(const uint8_t peerMac[6]) {
+    Serial.printf("Deleting peer " MACSTR "\n", MAC2ARGS(peerMac));
     auto result = esp_now_del_peer(peerMac);
     if (result != ESP_OK) Serial.printf("Failed to delete peer " MACSTR ", error: %s\n", MAC2ARGS(peerMac), espNowErrorToString(result).c_str());
     return result == ESP_OK;

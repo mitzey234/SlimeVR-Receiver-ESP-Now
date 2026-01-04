@@ -99,13 +99,14 @@ class ESPNowCommunication {
 
         unsigned long lastPairingBroadcast = 0;
         unsigned long lastHeartbeatCheck = 0;
-        static constexpr unsigned long pairingBroadcastInterval = 500;
+        static constexpr unsigned long pairingBroadcastInterval = 100;
 
         // Send queue for rate limiting
         struct PendingMessage {
             uint8_t peerMac[6];
             uint8_t data[ESP_NOW_MAX_DATA_LEN];
             size_t dataLen;
+            bool ephemeral;
             Tracker* tracker;  // Pointer to associated tracker for updating ping info
         };
         static constexpr size_t maxQueueSize = 64;
@@ -117,6 +118,7 @@ class ESPNowCommunication {
         }
         unsigned long lastSendTime = 0;
         static constexpr unsigned long sendRateLimit = 5;
+        void queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker, bool ephemeral);
         void queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker);
         void queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen);
         void processSendQueue();

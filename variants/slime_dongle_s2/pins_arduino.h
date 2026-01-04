@@ -8,7 +8,7 @@
 #define USB_PID          0x7690
 #define USB_MANUFACTURER "SlimeVR"
 #define USB_PRODUCT      "SlimeVR ESPNow Dongle"
-#define USB_SERIAL       "SVRDGESP01B"
+#define USB_SERIAL       "SVRDGA1B2C3D4E5F6"
 
 // Default USB FirmwareMSC Settings
 #define USB_FW_MSC_VENDOR_ID        "ESP32-S2"     // max 8 chars

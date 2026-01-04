@@ -38,8 +38,6 @@ private:
     Configuration() = default;
 
     static Configuration instance;
-
-    static constexpr char savedTrackerCountPath[] = "/savedTrackerCount.bin";
     static constexpr char securityCodePath[] = "/securityCode.bin";
     static constexpr char pairedTrackersPath[] = "/pairedTrackers.bin";
     static constexpr char trackerIdsPath[] = "/trackerIds.bin";

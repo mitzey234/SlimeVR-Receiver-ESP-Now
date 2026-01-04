@@ -7,6 +7,7 @@
 #include "packetHandling.h"
 #include "logging/Logger.h"
 #include "GlobalVars.h"
+#include <WiFi.h>
 
 #include <Arduino.h>
 #include <USB.h>
@@ -53,6 +54,20 @@ void start () {
     if (!started) {
         started = true;
         hidDevice.begin();
+        uint8_t mac[6];
+            if (WiFi.getMode() == WIFI_MODE_NULL) {
+                WiFi.mode(WIFI_STA);
+                delay(100);
+            }
+            WiFi.macAddress(mac);
+
+            // Format for USB_SERIAL: SVRDG + last 6 hex digits (e.g., SVRDGA1B2C3D4E5F6)
+            char usbSerial[20] = "SVRDG";
+            // Append full MAC address (12 hex digits) to serial string
+            snprintf(usbSerial + 5, sizeof(usbSerial) - 5, "%02X%02X%02X%02X%02X%02X",
+                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        Serial.printf("USB Serial Number: %s\n", usbSerial);
+        USB.serialNumber(usbSerial);
         USB.begin();
     }
 }
@@ -68,7 +83,7 @@ void stop () {
 void setup() { 
     Serial.begin(115200);
     Serial.println("Starting up " USB_PRODUCT "...");
-    
+
     // Initialize boot mode pin with pullup
     pinMode(BOOT_MODE_PIN, INPUT_PULLUP);
     
@@ -122,11 +137,9 @@ void setup() {
             if (!espnow.isInPairingMode()) {
                 Serial.println("Pairing mode enabled");
                 espnow.enterPairingMode();
-                statusManager.setStatus(SlimeVR::Status::PAIRING_MODE, true);
             } else {
                 Serial.println("Pairing mode disabled");
                 espnow.exitPairingMode();
-                statusManager.setStatus(SlimeVR::Status::PAIRING_MODE, false);
             }
         }
     });

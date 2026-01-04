@@ -6,6 +6,12 @@
 #include "packetHandling.h"
 #include <esp_wifi.h>
 #include <string>
+#include "../GlobalVars.h"
+
+// Ensure StatusManager type is defined before extern declaration
+// Use the global StatusManager instance defined in main.cpp
+extern SlimeVR::Status::StatusManager statusManager;
+
 
 #define MACSTR "%02x:%02x:%02x:%02x:%02x:%02x"
 #define MAC2ARGS(mac) mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
@@ -92,11 +98,13 @@ inline bool ESPNowCommunication::isTrackerIdConnected(uint8_t trackerId) const {
 // Enters pairing mode
 void ESPNowCommunication::enterPairingMode() {
     pairing = true;
+    statusManager.setStatus(SlimeVR::Status::PAIRING_MODE, true);
 }
 
 // Exits pairing mode
 void ESPNowCommunication::exitPairingMode() {
     pairing = false;
+    statusManager.setStatus(SlimeVR::Status::PAIRING_MODE, false);
 }
 
 // Disconnect a single tracker by MAC
@@ -127,7 +135,7 @@ void ESPNowCommunication::disconnectAllTrackers() {
 }
 
 // Queue a message for sending with rate limiting
-void ESPNowCommunication::queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker) {
+void ESPNowCommunication::queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker, bool ephemeral) {
     // Validate message data
     if (dataLen == 0 || dataLen > ESP_NOW_MAX_DATA_LEN) {
         Serial.printf("Invalid message size %zu for " MACSTR ", skipping\n", dataLen, MAC2ARGS(peerMac));
@@ -149,12 +157,18 @@ void ESPNowCommunication::queueMessage(const uint8_t peerMac[6], const uint8_t *
     memcpy(msg.data, data, dataLen);
     msg.dataLen = dataLen;
     msg.tracker = tracker;
+    msg.ephemeral = ephemeral;
     queueTail = nextTail;
+}
+
+// Queue a message for sending with rate limiting
+void ESPNowCommunication::queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker) {
+    queueMessage(peerMac, data, dataLen, tracker, false);
 }
 
 // Overloaded method to queue a message without tracker pointer
 void ESPNowCommunication::queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen) {
-    queueMessage(peerMac, data, dataLen, nullptr);
+    queueMessage(peerMac, data, dataLen, nullptr, false);
 }
 
 // Process queued messages with rate limiting
@@ -184,7 +198,14 @@ void ESPNowCommunication::processSendQueue() {
             }
         }
         
+        //Serial.printf("Sending message to " MACSTR ", size %zu\n", MAC2ARGS(msg.peerMac), msg.dataLen);
         auto result = esp_now_send(msg.peerMac, msg.data, msg.dataLen);
+        
+        if (msg.ephemeral) {
+            // Remove peer if message was ephemeral
+            deletePeer(msg.peerMac);
+        }
+
         if (msg.tracker != nullptr) {
             // Update ping info if this message is associated with a tracker
             msg.tracker->lastPingSent = currentTime;
@@ -212,15 +233,12 @@ void ESPNowCommunication::processSendQueue() {
 void ESPNowCommunication::sendUnpairToTracker(const uint8_t mac[6]) {
     ESPNowUnpairMessage unpairMsg;
     memcpy(unpairMsg.securityBytes, securityCode, 8);
-    auto result = addPeer(mac);
-    if (result == ESP_OK) {
-        // Queue unpair message twice to ensure delivery
-        queueMessage(mac, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
-        queueMessage(mac, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
-        Serial.printf("Queued unpair to tracker " MACSTR "\n", MAC2ARGS(mac));
-    } else {
-        Serial.printf("Failed to add peer for unpairing tracker " MACSTR ", error: %s (%d)\n", MAC2ARGS(mac), espNowErrorToString(result).c_str(), result);
-    }
+	queueMessage(mac, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
+	queueMessage(mac, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
+	queueMessage(mac, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
+	queueMessage(mac, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
+	queueMessage(mac, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage), nullptr, true);
+	Serial.printf("Queued unpair to tracker " MACSTR "\n", MAC2ARGS(mac));
 }
 
 // Sends unpair messages to all connected trackers
@@ -229,14 +247,11 @@ void ESPNowCommunication::sendUnpairToAllTrackers() {
     memcpy(unpairMsg.securityBytes, securityCode, 8);
 
     for (const auto &tracker : connectedTrackers) {
-        auto result = addPeer(tracker.mac.data());
-        if (result == ESP_OK) {
-            // Queue unpair message twice to ensure delivery
-            queueMessage(tracker.mac.data(), reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
-            queueMessage(tracker.mac.data(), reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
-        } else {
-            Serial.printf("Failed to add peer for unpairing tracker " MACSTR ", error: %s (%d)\n", MAC2ARGS(tracker.mac.data()), espNowErrorToString(result).c_str(), result);
-        }
+		queueMessage(tracker.mac.data(), reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
+		queueMessage(tracker.mac.data(), reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
+		queueMessage(tracker.mac.data(), reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
+		queueMessage(tracker.mac.data(), reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
+		queueMessage(tracker.mac.data(), reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage), nullptr, true);
     }
 
     Serial.println("Unpair messages queued to all trackers");
@@ -344,20 +359,12 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
     // Handle less frequent message types
     switch (header) {
     case ESPNowMessageTypes::PAIRING_REQUEST: {
-        if (!pairing) return; // Ignore pairing requests if not in pairing mode
-
         const ESPNowPairingMessage &request = message->pairing;
         if (memcmp(request.securityBytes, securityCode, 8) != 0) return; // Invalid security code
 
-        // Step 1: Add peer to allow communication
-        auto addingResult = addPeer(senderInfo->src_addr);
-        if (addingResult != ESP_OK) {
-            Serial.printf("Couldn't add tracker at mac address " MACSTR "! Code: %s\n", MAC2ARGS(senderInfo->src_addr), espNowErrorToString(addingResult).c_str());
-            return;
-        }
-
-        // Step 2: Add to paired trackers and allocate tracker ID (if not already paired)
+        // Step 1: Check if tracker is already paired
         if (!Configuration::getInstance().isPairedTracker(senderInfo->src_addr)) {
+            if (!pairing) return; // Ignore pairing requests if not in pairing mode
             Configuration::getInstance().addPairedTracker(senderInfo->src_addr);
             // Allocate persistent tracker ID for this MAC address
             uint8_t trackerId = Configuration::getInstance().getTrackerIdForMac(senderInfo->src_addr);
@@ -366,14 +373,11 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
             Serial.printf("Tracker at mac address " MACSTR " is already paired!\n", MAC2ARGS(senderInfo->src_addr));
         }
 
-        // Step 3: Send acknowledgment
+        // Step 2: Send acknowledgment
         ESPNowPairingAckMessage ackMessage;
-        queueMessage(senderInfo->src_addr, reinterpret_cast<uint8_t *>(&ackMessage), sizeof(ackMessage));
+        queueMessage(senderInfo->src_addr, reinterpret_cast<uint8_t *>(&ackMessage), sizeof(ackMessage), nullptr, true);
 
-        // Step 4: Remove peer after sending acknowledgment
-        deletePeer(senderInfo->src_addr);
-
-        // Step 5: Invoke paired event
+        // Step 3: Invoke paired event
         invokeTrackerPairedEvent();
         break;
     }
@@ -403,23 +407,21 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
             handshakeResponse.trackerId = tracker->trackerId;
             handshakeResponse.channel = channel;
             queueMessage(senderInfo->src_addr, reinterpret_cast<const uint8_t *>(&handshakeResponse), sizeof(ESPNowConnectionAckMessage));
+			queueMessage(senderInfo->src_addr, reinterpret_cast<const uint8_t *>(&handshakeResponse), sizeof(ESPNowConnectionAckMessage));
             return;
         }
 
-        // Step 1: Add peer to allow communication
-        auto addingResult = addPeer(senderInfo->src_addr);
-        if (addingResult != ESP_OK) return;
-
-        // Step 2: Get persistent tracker ID for this MAC address
+        // Step 1: Get persistent tracker ID for this MAC address
         uint8_t trackerId = Configuration::getInstance().getTrackerIdForMac(senderInfo->src_addr);
 
-        // Step 3: Send handshake response with tracker ID and channel
+        // Step 2: Send handshake response with tracker ID and channel
         ESPNowConnectionAckMessage handshakeResponse;
         handshakeResponse.trackerId = trackerId;
         handshakeResponse.channel = channel;
         queueMessage(senderInfo->src_addr, reinterpret_cast<const uint8_t *>(&handshakeResponse), sizeof(ESPNowConnectionAckMessage));
+		queueMessage(senderInfo->src_addr, reinterpret_cast<const uint8_t *>(&handshakeResponse), sizeof(ESPNowConnectionAckMessage));
 
-        // Step 4: Add tracker to connected list with heartbeat tracking
+        // Step 3: Add tracker to connected list with heartbeat tracking
         Tracker newTracker;
         memcpy(newTracker.mac.data(), senderInfo->src_addr, 6);
         newTracker.trackerId = trackerId;
@@ -430,10 +432,10 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
 
         Serial.printf("Device with mac address " MACSTR " connected with tracker id %d!\n", MAC2ARGS(senderInfo->src_addr), trackerId);
 
-        // Step 5: Send rate update to newly connected trackers
+        // Step 4: Send rate update to newly connected trackers
         sendRateUpdateNextTick = true;
 
-        // Step 6: Invoke connected event (also sends rate updates to all other trackers)
+        // Step 5: Invoke connected event (also sends rate updates to all other trackers)
         invokeTrackerConnectedEvent(senderInfo->src_addr);
         return;
     }
@@ -479,7 +481,7 @@ void ESPNowCommunication::update() {
 
     // PRIORITY 1: Handle heartbeat system FIRST - critical for connection stability
     // Process heartbeats before stats/pairing to maintain accurate timing
-    if (!connectedTrackers.empty() && (currentTime - lastHeartbeatCheck >= heartbeatInterval)) {
+    if (!connectedTrackers.empty() && (currentTime - lastHeartbeatCheck >= heartbeatInterval+100)) {
         lastHeartbeatCheck = currentTime;
 
         //For each connected tracker

@@ -6,6 +6,8 @@
 
 #define DEFAULT_WIFI_CHANNEL 6
 
+#define STARTING_TRACKER_ID 0
+
 Configuration &Configuration::getInstance() {
     return instance;
 }
@@ -219,6 +221,31 @@ void Configuration::removePairedTracker(const uint8_t mac[6]) {
     file = LittleFS.open(pairedTrackersPath, "w");
     file.write(remainingMacs.data(), remainingMacs.size());
     file.close();
+
+
+    // Remove tracker ID for this MAC
+    if (LittleFS.exists(trackerIdsPath)) {
+        std::vector<uint8_t> remainingData;
+        auto idFile = LittleFS.open(trackerIdsPath, "r");
+        uint8_t idMac[6];
+        uint8_t trackerId;
+        while (idFile.read(idMac, 6) == 6 && idFile.read(&trackerId, 1) == 1) {
+            if (memcmp(idMac, mac, 6) != 0) {
+                for (int i = 0; i < 6; i++) {
+                    remainingData.push_back(idMac[i]);
+                }
+                remainingData.push_back(trackerId);
+            }
+        }
+        idFile.close();
+
+        // Write back all except the removed one
+        idFile = LittleFS.open(trackerIdsPath, "w");
+        if (!remainingData.empty()) {
+            idFile.write(remainingData.data(), remainingData.size());
+        }
+        idFile.close();
+    }
     
     Serial.printf("Removed paired tracker: %02x:%02x:%02x:%02x:%02x:%02x\n",
                   mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
@@ -279,8 +306,8 @@ uint8_t Configuration::allocateTrackerIdForMac(const uint8_t mac[6]) {
         file.close();
     }
     
-    // Find first available ID (starting from 0)
-    uint8_t newId = 0;
+    // Find first available ID (starting from STARTING_TRACKER_ID)
+    uint8_t newId = STARTING_TRACKER_ID;
     while (std::find(usedIds.begin(), usedIds.end(), newId) != usedIds.end()) {
         newId++;
     }

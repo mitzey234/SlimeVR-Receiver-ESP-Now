@@ -55,7 +55,7 @@ void PacketHandling::insert(const uint8_t *data, uint8_t len, int8_t rssi) {
     buffer.push(packet);
 }
 
-void PacketHandling::sendDisconnectionStatus(uint8_t trackerId) {
+void PacketHandling::sendDisconnectionStatus(uint8_t trackerId) { 
     // Create packet 3 (status) with SVR_STATUS_DISCONNECTED (0)
     uint8_t packet[16] = {0};
     packet[0] = 3;  // packet type 3 (status)
@@ -73,7 +73,7 @@ void PacketHandling::createRegistrationReport(uint8_t *report, size_t trackerInd
     // Format: [255][tracker_id][6-byte MAC address][8 bytes reserved]
     memset(report, 0, reportSize);
     report[0] = 0xff;
-    report[1] = (uint8_t)trackerIndex;
+    report[1] = *ESPNowCommunication::getInstance().getTrackerIdByIndex(trackerIndex);
     
     // Get MAC address from connected trackers via ESPNow
     ESPNowCommunication::getInstance().getTrackerMacByIndex(trackerIndex, &report[2]);
@@ -83,8 +83,7 @@ void PacketHandling::createRegistrationReport(uint8_t *report, size_t trackerInd
     // Debug output
     // Serial.printf("Registration report for tracker #%d\n", trackerIndex);
     // Serial.printf("  Marker: 0x%02x, Tracker ID: %d\n", report[0], report[1]);
-    // Serial.printf("  MAC Address: %02x:%02x:%02x:%02x:%02x:%02x\n",
-    //               report[2], report[3], report[4], report[5], report[6], report[7]);
+    // Serial.printf("  MAC Address: %02x:%02x:%02x:%02x:%02x:%02x\n", report[2], report[3], report[4], report[5], report[6], report[7]);
 }
 
 void PacketHandling::tick(HIDDevice &hidDevice) {
@@ -109,9 +108,7 @@ void PacketHandling::tick(HIDDevice &hidDevice) {
     unsigned long interval = now - lastSendAttempt;
 
     // Throttle to prevent overwhelming USB endpoint
-    if (interval < minSendIntervalMs) {
-        return;
-    }
+    if (interval < minSendIntervalMs) return;
 
     // Get reference to ESPNow instance once
     auto &espnow = ESPNowCommunication::getInstance();
@@ -120,9 +117,7 @@ void PacketHandling::tick(HIDDevice &hidDevice) {
     
     // Early exit if nothing to send
     if (availableReports == 0) {
-        if (trackerCount == 0 || (now - lastRegistrationSent) < registrationIntervalMs) {
-            return;
-        }
+        if (trackerCount == 0 || (now - lastRegistrationSent) < registrationIntervalMs) return;
         lastRegistrationSent = now;
     }
 
@@ -156,8 +151,7 @@ void PacketHandling::tick(HIDDevice &hidDevice) {
     if (reportsWritten > 0) {
         // Zero-fill any remaining bytes if not a full 64-byte transfer
         if (reportsWritten < reportsPerTransfer) {
-            memset(&transferBuffer[reportsWritten * reportSize], 0, 
-                   (reportsPerTransfer - reportsWritten) * reportSize);
+            memset(&transferBuffer[reportsWritten * reportSize], 0, (reportsPerTransfer - reportsWritten) * reportSize);
         }
         
         lastSendAttempt = now;

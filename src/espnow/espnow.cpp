@@ -22,7 +22,7 @@ unsigned int ESPNowCommunication::channel = 6;
 
 ESPNowCommunication ESPNowCommunication::instance;
 
-// Gets the global instance of the ESPNowCommunication class
+// Gets the singleton instance of ESPNowCommunication
 ESPNowCommunication &ESPNowCommunication::getInstance() {
     return instance;
 }
@@ -69,11 +69,16 @@ bool ESPNowCommunication::getTrackerMacByIndex(size_t index, uint8_t mac[6]) con
     return true;
 }
 
+// Gets the MAC address of a connected tracker by its index
+uint8_t* ESPNowCommunication::getTrackerIdByIndex(size_t index) {
+    return &connectedTrackers[index].trackerId;
+}
+
 // Gets the tracker structure for a given MAC address
-inline ESPNowCommunication::Tracker *ESPNowCommunication::getTracker(const uint8_t peerMac[6]) {
+ESPNowCommunication::Tracker *ESPNowCommunication::getTracker(const uint8_t peerMac[6]) {
     // Fast MAC comparison using integer comparisons instead of memcmp
     for (auto &tracker : connectedTrackers) {
-        if (*reinterpret_cast<const uint32_t *>(tracker.mac.data()) == *reinterpret_cast<const uint32_t *>(peerMac) && *reinterpret_cast<const uint16_t *>(tracker.mac.data() + 4) == *reinterpret_cast<const uint16_t *>(peerMac + 4) && esp_now_is_peer_exist(peerMac)) {
+        if (*reinterpret_cast<const uint32_t *>(tracker.mac.data()) == *reinterpret_cast<const uint32_t *>(peerMac) && *reinterpret_cast<const uint16_t *>(tracker.mac.data() + 4) == *reinterpret_cast<const uint16_t *>(peerMac + 4)) {
             return &tracker;
         }
     }
@@ -81,7 +86,7 @@ inline ESPNowCommunication::Tracker *ESPNowCommunication::getTracker(const uint8
 }
 
 // Checks if a tracker with the given MAC address is currently connected
-inline bool ESPNowCommunication::isTrackerConnected(const uint8_t peerMac[6]) {
+bool ESPNowCommunication::isTrackerConnected(const uint8_t peerMac[6]) {
     // Fast MAC comparison using integer comparisons instead of memcmp
     for (const auto &tracker : connectedTrackers) {
         if (*reinterpret_cast<const uint32_t *>(tracker.mac.data()) == *reinterpret_cast<const uint32_t *>(peerMac) && *reinterpret_cast<const uint16_t *>(tracker.mac.data() + 4) == *reinterpret_cast<const uint16_t *>(peerMac + 4) && esp_now_is_peer_exist(peerMac)) return true;
@@ -90,7 +95,7 @@ inline bool ESPNowCommunication::isTrackerConnected(const uint8_t peerMac[6]) {
 }
 
 // Checks if a tracker ID is currently connected
-inline bool ESPNowCommunication::isTrackerIdConnected(uint8_t trackerId) const {
+bool ESPNowCommunication::isTrackerIdConnected(uint8_t trackerId) const {
     for (const auto &tracker : connectedTrackers) if (tracker.trackerId == trackerId) return true;
     return false;
 }
@@ -135,13 +140,14 @@ void ESPNowCommunication::disconnectAllTrackers() {
 }
 
 // Queue a message for sending with rate limiting
-void ESPNowCommunication::queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker, bool ephemeral) {
+void ESPNowCommunication::queueMessageMutex(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker, bool ephemeral) {
     // Validate message data
+    // Serial.printf("Queueing message to " MACSTR " of size %zu\n", MAC2ARGS(peerMac), dataLen);
     if (dataLen == 0 || dataLen > ESP_NOW_MAX_DATA_LEN) {
         Serial.printf("Invalid message size %zu for " MACSTR ", skipping\n", dataLen, MAC2ARGS(peerMac));
         return;
     }
-    
+
     // Check if queue is full
     size_t nextTail = (queueTail + 1) % maxQueueSize;
     if (nextTail == queueHead) {
@@ -158,10 +164,16 @@ void ESPNowCommunication::queueMessage(const uint8_t peerMac[6], const uint8_t *
     msg.dataLen = dataLen;
     msg.tracker = tracker;
     msg.ephemeral = ephemeral;
+    msg.skip = false;
     queueTail = nextTail;
 }
 
 // Queue a message for sending with rate limiting
+void ESPNowCommunication::queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker, bool ephemeral) {
+    queueMessageMutex(peerMac, data, dataLen, tracker, ephemeral);
+    processSendQueue();
+}
+
 void ESPNowCommunication::queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker) {
     queueMessage(peerMac, data, dataLen, tracker, false);
 }
@@ -173,11 +185,19 @@ void ESPNowCommunication::queueMessage(const uint8_t peerMac[6], const uint8_t *
 
 // Process queued messages with rate limiting
 void ESPNowCommunication::processSendQueue() {
-    if (queueHead == queueTail) return; // Queue is empty
+    MutexLock lock(queueMutex);
+    if (queueHead == queueTail) return;
+
+    // Serial.printf("Queue in processSendQueue: head=%zu, tail=%zu\n", queueHead, queueTail);
 
     unsigned long currentTime = millis();
     if (currentTime - lastSendTime >= sendRateLimit) {
         PendingMessage &msg = sendQueue[queueHead];
+
+        if (msg.skip) {
+            queueHead = (queueHead + 1) % maxQueueSize;
+            return;
+        }
 
         // Validate message data
         if (msg.dataLen == 0 || msg.dataLen > ESP_NOW_MAX_DATA_LEN) {
@@ -186,9 +206,10 @@ void ESPNowCommunication::processSendQueue() {
             lastSendTime = currentTime;
             return;
         }
-        
+
         // Ensure peer is added before sending
         if (!esp_now_is_peer_exist(msg.peerMac)) {
+            Serial.printf("Peer " MACSTR " not found, adding before sending queued message\n", MAC2ARGS(msg.peerMac));
             auto addResult = addPeer(msg.peerMac);
             if (addResult != ESP_OK) {
                 Serial.printf("Failed to add peer " MACSTR " for queued message, error: %s (%d)\n", MAC2ARGS(msg.peerMac), espNowErrorToString(addResult).c_str(), addResult);
@@ -211,7 +232,7 @@ void ESPNowCommunication::processSendQueue() {
             msg.tracker->lastPingSent = currentTime;
             msg.tracker->pingStartTime = currentTime;
         }
-        
+
         if (result == ESP_OK) {
             // Message sent successfully, remove from queue
             queueHead = (queueHead + 1) % maxQueueSize;
@@ -235,10 +256,8 @@ void ESPNowCommunication::sendUnpairToTracker(const uint8_t mac[6]) {
     memcpy(unpairMsg.securityBytes, securityCode, 8);
 	queueMessage(mac, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
 	queueMessage(mac, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
-	queueMessage(mac, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
-	queueMessage(mac, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
 	queueMessage(mac, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage), nullptr, true);
-	Serial.printf("Queued unpair to tracker " MACSTR "\n", MAC2ARGS(mac));
+	// Serial.printf("Queued unpair to tracker " MACSTR "\n", MAC2ARGS(mac));
 }
 
 // Sends unpair messages to all connected trackers
@@ -249,12 +268,10 @@ void ESPNowCommunication::sendUnpairToAllTrackers() {
     for (const auto &tracker : connectedTrackers) {
 		queueMessage(tracker.mac.data(), reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
 		queueMessage(tracker.mac.data(), reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
-		queueMessage(tracker.mac.data(), reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
-		queueMessage(tracker.mac.data(), reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
 		queueMessage(tracker.mac.data(), reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage), nullptr, true);
     }
 
-    Serial.println("Unpair messages queued to all trackers");
+    // Serial.println("Unpair messages queued to all trackers");
 }
 
 // Sends rate update messages to all connected trackers
@@ -272,12 +289,21 @@ void ESPNowCommunication::sendRateUpdateToAllTrackers() {
     rateMsg.pollRateHz = pollRateHz;
 
     for (const auto &tracker : connectedTrackers) {
+        // Serial.printf("Queuing rate update to tracker " MACSTR ": %u Hz\n", MAC2ARGS(tracker.mac.data()), pollRateHz);
         queueMessage(tracker.mac.data(), reinterpret_cast<const uint8_t *>(&rateMsg), sizeof(ESPNowTrackerRateMessage));
     }
 }
 
 // Initializes ESPNOW communication
 ErrorCodes ESPNowCommunication::begin() {
+    // Initialize mutex for queue protection
+    if (!queueMutex) {
+        queueMutex = xSemaphoreCreateMutex();
+        if (!queueMutex) {
+            Serial.println("[ESPNOW] Failed to create queue mutex!");
+            return ErrorCodes::ESP_NOW_INIT_FAILED;
+        }
+    }
     channel = Configuration::getInstance().getWifiChannel();
 
     // Pre-allocate vectors to avoid reallocations during operation
@@ -305,7 +331,7 @@ ErrorCodes ESPNowCommunication::begin() {
         return ErrorCodes::ESP_NOW_INIT_FAILED;
     }
 
-    result = addPeer(broadcastAddress);
+    result = addPeer(broadcastAddress, true);
     if (result != ESP_OK)
     {
         Serial.printf("Couldn't add broadcast peer! - %s\n", espNowErrorToString(result).c_str());
@@ -322,7 +348,7 @@ ErrorCodes ESPNowCommunication::begin() {
     uint8_t macaddr[6];
     WiFi.macAddress(macaddr);
 
-    Serial.printf("[ESPNOW] address: %02x:%02x:%02x:%02x:%02x:%02x\n", macaddr[0], macaddr[1], macaddr[2], macaddr[3], macaddr[4], macaddr[5]);
+    Serial.printf("[ESPNOW] address: %02x:%02x:%02x:%02x:%02x:%02x Channel: %d\n", macaddr[0], macaddr[1], macaddr[2], macaddr[3], macaddr[4], macaddr[5], WiFi.channel());
     return ErrorCodes::NO_ERROR;
 }
 
@@ -334,6 +360,7 @@ void ESPNowCommunication::onReceive(const esp_now_recv_info_t *senderInfo, const
 // Handles incoming ESPNOW messages
 void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, const uint8_t *data, int dataLen) {
     // Fast path: cast message once and read header
+    //Serial.printf("[ESPNOW] Received message of length %d from " MACSTR "\n", dataLen, MAC2ARGS(senderInfo->src_addr));
     const ESPNowMessage *message = reinterpret_cast<const ESPNowMessage *>(data);
     const ESPNowMessageTypes header = message->base.header;
 
@@ -375,6 +402,7 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
 
         // Step 2: Send acknowledgment
         ESPNowPairingAckMessage ackMessage;
+        // Serial.printf("Sending pairing acknowledgment to " MACSTR "\n", MAC2ARGS(senderInfo->src_addr));
         queueMessage(senderInfo->src_addr, reinterpret_cast<uint8_t *>(&ackMessage), sizeof(ackMessage), nullptr, true);
 
         // Step 3: Invoke paired event
@@ -385,6 +413,7 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         return;
     case ESPNowMessageTypes::HANDSHAKE_REQUEST: {
         const ESPNowConnectionMessage &handshake = message->connection;
+        // Validate security code
         if (memcmp(handshake.securityBytes, securityCode, 8) != 0) {
             Serial.printf("Received handshake from " MACSTR " with invalid security code! Sent: ", MAC2ARGS(senderInfo->src_addr));
             for (int i = 0; i < 8; ++i) Serial.printf("%02x", handshake.securityBytes[i]);
@@ -406,8 +435,8 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
             ESPNowConnectionAckMessage handshakeResponse;
             handshakeResponse.trackerId = tracker->trackerId;
             handshakeResponse.channel = channel;
+            // Serial.printf("Re-sending handshake ack to " MACSTR " for tracker ID %d\n", MAC2ARGS(senderInfo->src_addr), tracker->trackerId);
             queueMessage(senderInfo->src_addr, reinterpret_cast<const uint8_t *>(&handshakeResponse), sizeof(ESPNowConnectionAckMessage));
-			queueMessage(senderInfo->src_addr, reinterpret_cast<const uint8_t *>(&handshakeResponse), sizeof(ESPNowConnectionAckMessage));
             return;
         }
 
@@ -418,8 +447,8 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         ESPNowConnectionAckMessage handshakeResponse;
         handshakeResponse.trackerId = trackerId;
         handshakeResponse.channel = channel;
+        // Serial.printf("Sending handshake ack to " MACSTR " with tracker ID %d\n", MAC2ARGS(senderInfo->src_addr), trackerId);
         queueMessage(senderInfo->src_addr, reinterpret_cast<const uint8_t *>(&handshakeResponse), sizeof(ESPNowConnectionAckMessage));
-		queueMessage(senderInfo->src_addr, reinterpret_cast<const uint8_t *>(&handshakeResponse), sizeof(ESPNowConnectionAckMessage));
 
         // Step 3: Add tracker to connected list with heartbeat tracking
         Tracker newTracker;
@@ -449,6 +478,7 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         // Send heartbeat response with the same sequence number
         ESPNowHeartbeatResponseMessage response;
         response.sequenceNumber = message->heartbeatEcho.sequenceNumber;
+        // Serial.printf("Sending heartbeat response to tracker " MACSTR " with sequence number %u\n", MAC2ARGS(mac), response.sequenceNumber);
         queueMessage(mac, reinterpret_cast<const uint8_t *>(&response), sizeof(ESPNowHeartbeatResponseMessage));
         return;
     }
@@ -525,10 +555,11 @@ void ESPNowCommunication::update() {
                 heartbeatMsg.sequenceNumber = tracker.expectedSequenceNumber;
 
                 // Queue heartbeat through the rate-limited queue to prevent ESP_ERR_ESPNOW_NO_MEM
-                queueMessage(tracker.mac.data(), reinterpret_cast<uint8_t *>(&heartbeatMsg), sizeof(ESPNowHeartbeatEchoMessage), &tracker);
-
                 tracker.lastPingSent = currentTime;
                 tracker.pingStartTime = currentTime;
+                
+                // Serial.printf("Sending heartbeat echo to tracker " MACSTR " with sequence number %u\n", MAC2ARGS(tracker.mac.data()), heartbeatMsg.sequenceNumber);
+                queueMessage(tracker.mac.data(), reinterpret_cast<uint8_t *>(&heartbeatMsg), sizeof(ESPNowHeartbeatEchoMessage), &tracker);
                 tracker.waitingForResponse = true;
             }
 
@@ -544,6 +575,7 @@ void ESPNowCommunication::update() {
         announcement.channel = channel;
         memcpy(announcement.securityBytes, securityCode, 8);
 
+        // Serial.println("Broadcasting pairing announcement");
         queueMessage(broadcastAddress, reinterpret_cast<uint8_t *>(&announcement), sizeof(announcement));
     }
 
@@ -618,7 +650,7 @@ std::string ESPNowCommunication::espNowErrorToString(esp_err_t error) {
 }
 
 // Adds a ESP-Now peer with the given MAC address
-uint8_t ESPNowCommunication::addPeer(const uint8_t peerMac[6]) {
+uint8_t ESPNowCommunication::addPeer(const uint8_t peerMac[6], bool defaultConfig) {
     Serial.printf("Adding peer " MACSTR "\n", MAC2ARGS(peerMac));
     // Check if peer already exists
     if (esp_now_is_peer_exist(peerMac)) {
@@ -636,16 +668,30 @@ uint8_t ESPNowCommunication::addPeer(const uint8_t peerMac[6]) {
     esp_err_t result = esp_now_add_peer(&peer);
     if (result != ESP_OK) {
         Serial.printf("Failed to add peer, error: %s\n", espNowErrorToString(result).c_str());
-    } else {
+    } else if (!defaultConfig){
         esp_now_set_peer_rate_config(peer.peer_addr, &rate_config);
     }
     return result;
 }
 
+// Adds a ESP-Now peer with the given MAC address (defaultConfig = false)
+uint8_t ESPNowCommunication::addPeer(const uint8_t peerMac[6]) {
+    return addPeer(peerMac, false);
+}
+
 // Deletes a ESP-Now peer with the given MAC address
 bool ESPNowCommunication::deletePeer(const uint8_t peerMac[6]) {
+    if (!esp_now_is_peer_exist(peerMac)) {
+        Serial.printf("Peer " MACSTR " does not exist.\n", MAC2ARGS(peerMac));
+        return true; // Peer does not exist, return success
+    }
+
     Serial.printf("Deleting peer " MACSTR "\n", MAC2ARGS(peerMac));
     auto result = esp_now_del_peer(peerMac);
-    if (result != ESP_OK) Serial.printf("Failed to delete peer " MACSTR ", error: %s\n", MAC2ARGS(peerMac), espNowErrorToString(result).c_str());
+    if (result != ESP_OK || esp_now_is_peer_exist(peerMac)) Serial.printf("Failed to delete peer " MACSTR ", error: %s\n", MAC2ARGS(peerMac), espNowErrorToString(result).c_str());
+
+	//Remove all pending messages to this peer from the send queue by setting the ignore flag
+	for (size_t i = 0; i < maxQueueSize; ++i) if (memcmp(sendQueue[i].peerMac, peerMac, 6) == 0) sendQueue[i].skip = true; // Mark message to be skipped
+
     return result == ESP_OK;
 }

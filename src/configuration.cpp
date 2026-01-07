@@ -145,7 +145,7 @@ void Configuration::getSecurityCode(uint8_t securityCode[8]) {
         file.write(securityCode, 8);
         file.close();
         
-        Serial.printf("Generated security code: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
+        Serial.printf("Generated security code: %02x%02x%02x%02x%02x%02x%02x%02x\n",
                      securityCode[0], securityCode[1], securityCode[2], securityCode[3],
                      securityCode[4], securityCode[5], securityCode[6], securityCode[7]);
     } else {
@@ -165,7 +165,7 @@ void Configuration::resetSecurityCode() {
         LittleFS.remove(securityCodePath);
         Serial.println("Security code reset");
         uint8_t dummy[8];
-        getSecurityCode(dummy); // Generate new security code
+        Configuration::getInstance().getSecurityCode(ESPNowCommunication::getInstance().securityCode); // Reload into ESPNowCommunication
     }
 }
 
@@ -199,9 +199,7 @@ void Configuration::addPairedTracker(const uint8_t mac[6]) {
 }
 
 void Configuration::removePairedTracker(const uint8_t mac[6]) {
-    if (!LittleFS.exists(pairedTrackersPath)) {
-        return;
-    }
+    if (!LittleFS.exists(pairedTrackersPath)) return;
     
     // Read all MAC addresses except the one to remove
     std::vector<uint8_t> remainingMacs;

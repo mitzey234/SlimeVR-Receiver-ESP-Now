@@ -30,7 +30,7 @@ class ESPNowCommunication {
         bool disconnectSingleTracker(const uint8_t mac[6]);
         void sendUnpairToAllTrackers();
         void sendUnpairToTracker(const uint8_t mac[6]);
-        inline bool isTrackerIdConnected(uint8_t trackerId) const;
+        bool isTrackerIdConnected(uint8_t trackerId) const;
 
         void update();
 
@@ -40,7 +40,10 @@ class ESPNowCommunication {
         
         size_t getConnectedTrackerCount() const;
         bool getTrackerMacByIndex(size_t index, uint8_t mac[6]) const;
+        uint8_t* getTrackerIdByIndex(size_t index);
         uint8_t securityCode[8];
+
+        bool isTrackerConnected(const uint8_t peerMac[6]);
 
     private:
         static ESPNowCommunication instance;
@@ -70,9 +73,9 @@ class ESPNowCommunication {
         };
 
         uint8_t addPeer(const uint8_t peerMac[6]);
+        uint8_t addPeer(const uint8_t peerMac[6], bool defaultConfig);
         bool deletePeer(const uint8_t peerMac[6]);
-        inline bool isTrackerConnected(const uint8_t peerMac[6]);
-        inline Tracker* getTracker(const uint8_t peerMac[6]);
+        Tracker* getTracker(const uint8_t peerMac[6]);
 
         bool pairing = false;
 
@@ -108,6 +111,7 @@ class ESPNowCommunication {
             size_t dataLen;
             bool ephemeral;
             Tracker* tracker;  // Pointer to associated tracker for updating ping info
+            bool skip = false;
         };
         static constexpr size_t maxQueueSize = 64;
         PendingMessage sendQueue[maxQueueSize];
@@ -118,10 +122,22 @@ class ESPNowCommunication {
         }
         unsigned long lastSendTime = 0;
         static constexpr unsigned long sendRateLimit = 5;
+        void queueMessageMutex(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker, bool ephemeral);
         void queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker, bool ephemeral);
         void queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker);
         void queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen);
         void processSendQueue();
+
+        // Mutex for protecting send queue (thread safety)
+        SemaphoreHandle_t queueMutex = nullptr;
+        // RAII helper for mutex locking
+        class MutexLock {
+        public:
+            MutexLock(SemaphoreHandle_t mutex) : m(mutex) { if (m) xSemaphoreTake(m, portMAX_DELAY); }
+            ~MutexLock() { if (m) xSemaphoreGive(m); }
+        private:
+            SemaphoreHandle_t m;
+        };
 
         std::string espNowErrorToString(esp_err_t error);
 };

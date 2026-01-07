@@ -118,11 +118,11 @@ void setup() {
 
     button.onLongPress([]() {
         Serial.println("Trackers reset");
-        Configuration::getInstance().clearAllPairedTrackers();
-        Configuration::getInstance().resetSecurityCode();
         statusManager.setStatus(SlimeVR::Status::RESETTING, true);
+        Configuration::getInstance().clearAllPairedTrackers();
         espnow.sendUnpairToAllTrackers();
         espnow.disconnectAllTrackers();
+        Configuration::getInstance().resetSecurityCode();
 
         // Blink LED twice to indicate reset action
         ledManager.pattern(500, 300, 2);

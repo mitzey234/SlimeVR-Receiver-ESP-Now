@@ -15,7 +15,8 @@ void ConsoleCommandHandler::update() {
                     LittleFS.remove("/pairedTrackers.bin");
                     LittleFS.remove("/securityCode.bin");
                     LittleFS.remove("/trackerIds.bin");
-                    Serial.println("[CMD] Factory reset complete. Please reboot device.");
+                    Serial.println("[CMD] Factory reset complete");
+                    ESP.restart();
                 } else if (serialBuffer.equalsIgnoreCase("pair")) {
                     bool pairing = !ESPNowCommunication::getInstance().isInPairingMode();
                     if (pairing) {
@@ -88,9 +89,11 @@ void ConsoleCommandHandler::update() {
                         if (valid && macParts == 6) {
                             // Remove from paired trackers
                             Configuration::getInstance().removePairedTracker(mac);
+
                             // Disconnect if connected
-                            if (ESPNowCommunication::getInstance().disconnectSingleTracker(mac)) {
+                            if (ESPNowCommunication::getInstance().isTrackerConnected(mac)) {
                                 ESPNowCommunication::getInstance().sendUnpairToTracker(mac);
+                                ESPNowCommunication::getInstance().disconnectSingleTracker(mac);
                                 Serial.printf("[CMD] Tracker %02x:%02x:%02x:%02x:%02x:%02x disconnected and unpaired.\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
                             } else {
                                 Serial.printf("[CMD] Tracker %02x:%02x:%02x:%02x:%02x:%02x unpaired.\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);

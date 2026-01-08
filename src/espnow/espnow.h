@@ -3,12 +3,12 @@
 #include "error_codes.h"
 #include "espnow/messages.h"
 
-#include <Arduino.h>
 #include <WiFi.h>
 #include <cstdint>
 #include <esp_now.h>
 #include <functional>
 #include <vector>
+#include "Serial.h"
 
 class ESPNowCommunication {
     public:
@@ -44,6 +44,8 @@ class ESPNowCommunication {
         uint8_t securityCode[8];
 
         bool isTrackerConnected(const uint8_t peerMac[6]);
+
+        void startOtaUpdate(const uint8_t auth[16], long port, const uint8_t ip[4], const char ssid[33], const char password[65]);
 
     private:
         static ESPNowCommunication instance;
@@ -140,4 +142,17 @@ class ESPNowCommunication {
         };
 
         std::string espNowErrorToString(esp_err_t error);
+
+        uint8_t ota_auth[16];
+        long ota_portNum;
+        uint8_t ota_ip[4];
+        char ota_ssid[33];
+        char ota_password[65];
+
+        unsigned int ota_timeout = 10000U; // 10 seconds timeout for OTA, trackers shouldn't take too long to enter this mode
+        unsigned int ota_send_interval = 2000U; // Resend every 2 seconds
+
+        bool ota_in_progress = false;
+        unsigned long ota_start_time = 0;
+        unsigned long ota_last_send_time = 0;
 };

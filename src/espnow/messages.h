@@ -13,7 +13,9 @@ enum class ESPNowMessageTypes : uint8_t
         TRACKER_DATA = 6,        // Regular tracker data packet
         PAIRING_ANNOUNCEMENT = 7, // When the gateway is announcing its presence for pairing
         UNPAIR = 8,              // When the gateway is unpairing a tracker
-        TRACKER_RATE = 9         // When the gateway is setting the polling rate for trackers
+        TRACKER_RATE = 9,         // When the gateway is setting the polling rate for trackers
+        ENTER_OTA_MODE = 10,        // When the gateway is instructing the tracker to enter OTA update mode
+        ENTER_OTA_ACK = 11     // Acknowledgment from tracker to gateway to enter OTA update mode
 };
 
 struct __attribute__((packed)) ESPNowPairingAnnouncementMessage {
@@ -68,6 +70,20 @@ struct __attribute__((packed)) ESPNowTrackerRateMessage {
     uint32_t pollRateHz;  // Polling rate in Hz (updates per second)
 };
 
+struct __attribute__((packed)) ESPNowEnterOtaModeMessage {
+    ESPNowMessageTypes header = ESPNowMessageTypes::ENTER_OTA_MODE;
+    uint8_t securityBytes[8];
+    uint8_t ota_auth[16];
+    long ota_portNum;
+    uint8_t ota_ip[4];
+    char ssid[33];
+    char password[65];
+};
+
+struct __attribute__((packed)) ESPNowEnterOtaAckMessage {
+    ESPNowMessageTypes header = ESPNowMessageTypes::ENTER_OTA_ACK;
+};
+
 struct __attribute__((packed)) ESPNowMessageBase {
     ESPNowMessageTypes header;
 };
@@ -83,4 +99,6 @@ union ESPNowMessage {
     ESPNowHeartbeatEchoMessage heartbeatEcho;
     ESPNowHeartbeatResponseMessage heartbeatResponse;
     ESPNowTrackerRateMessage trackerRate;
+    ESPNowEnterOtaModeMessage enterOtaMode;
+    ESPNowEnterOtaAckMessage enterOtaAck;
 };

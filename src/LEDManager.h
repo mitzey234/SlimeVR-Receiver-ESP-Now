@@ -24,7 +24,7 @@
 #ifndef SLIMEVR_LEDMANAGER_H
 #define SLIMEVR_LEDMANAGER_H
 
-#include <Arduino.h>
+#include "Serial.h"
 
 #define DEFAULT_LENGTH 300
 #define DEFAULT_GAP 500

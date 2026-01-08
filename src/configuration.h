@@ -2,6 +2,7 @@
 
 #include <LittleFS.h>
 #include <cstdint>
+#include "Serial.h"
 
 class Configuration {
 public:

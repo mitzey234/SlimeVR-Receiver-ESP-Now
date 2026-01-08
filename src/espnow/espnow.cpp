@@ -265,11 +265,9 @@ void ESPNowCommunication::sendUnpairToAllTrackers() {
     ESPNowUnpairMessage unpairMsg;
     memcpy(unpairMsg.securityBytes, securityCode, 8);
 
-    for (const auto &tracker : connectedTrackers) {
-		queueMessage(tracker.mac.data(), reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
-		queueMessage(tracker.mac.data(), reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
-		queueMessage(tracker.mac.data(), reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage), nullptr, true);
-    }
+    queueMessage(broadcastAddress, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
+    queueMessage(broadcastAddress, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
+    queueMessage(broadcastAddress, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
 
     // Serial.println("Unpair messages queued to all trackers");
 }
@@ -288,10 +286,8 @@ void ESPNowCommunication::sendRateUpdateToAllTrackers() {
     ESPNowTrackerRateMessage rateMsg;
     rateMsg.pollRateHz = pollRateHz;
 
-    for (const auto &tracker : connectedTrackers) {
-        // Serial.printf("Queuing rate update to tracker " MACSTR ": %u Hz\n", MAC2ARGS(tracker.mac.data()), pollRateHz);
-        queueMessage(tracker.mac.data(), reinterpret_cast<const uint8_t *>(&rateMsg), sizeof(ESPNowTrackerRateMessage));
-    }
+    // Send rate update as a broadcast instead of per-tracker
+    queueMessage(broadcastAddress, reinterpret_cast<const uint8_t *>(&rateMsg), sizeof(ESPNowTrackerRateMessage));
 }
 
 // Initializes ESPNOW communication
@@ -500,6 +496,15 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         }
         return;
     }
+    case ESPNowMessageTypes::ENTER_OTA_ACK:{
+        // Find the tracker and mark it as in OTA
+        const uint8_t *mac = senderInfo->src_addr;
+        Tracker *tracker = getTracker(mac);
+        if (tracker == nullptr) return;
+
+        disconnectSingleTracker(mac);
+        return;
+    }
     default:
         break;
     }
@@ -565,6 +570,47 @@ void ESPNowCommunication::update() {
 
             ++it;
         }
+    }
+
+    // Skip lower priority tasks if an OTA update is in progress
+    if (ota_in_progress) {
+        if (getConnectedTrackerCount() == 0) {
+            ota_in_progress = false;
+            Serial.println("All trackers entered OTA, resuming normal operation");
+            return;
+        } else if (currentTime - ota_start_time > ota_timeout) {
+            ota_in_progress = false;
+            Serial.println("OTA timeout expired, resuming normal operation");
+            return;
+        } else if (currentTime - ota_last_send_time >= ota_send_interval) {
+            ota_last_send_time = currentTime;
+
+            // Send enter OTA command to all connected trackers
+            ESPNowEnterOtaModeMessage otaMsg;
+            memcpy(otaMsg.securityBytes, securityCode, 8);
+            otaMsg.ota_portNum = ota_portNum;
+            memcpy(otaMsg.ota_ip, ota_ip, 4);
+            memcpy(otaMsg.ota_auth, ota_auth, 16);
+            memcpy(otaMsg.ssid, ota_ssid, sizeof(ota_ssid));
+            memcpy(otaMsg.password, ota_password, sizeof(ota_password));
+
+            queueMessage(broadcastAddress, reinterpret_cast<uint8_t *>(&otaMsg), sizeof(ESPNowEnterOtaModeMessage));
+        }
+
+        // Still report stats during OTA to monitor progress
+        if (currentTime - lastStatsReport >= 1000) {
+            const int deltaTime = currentTime - lastStatsReport;
+            lastStatsReport = currentTime;
+
+            const int pps = (recievedPacketCount * 1000) / deltaTime;
+            recievedPacketCount = 0;
+
+            const int bytesPerSecond = (recievedByteCount * 1000) / deltaTime;
+            recievedByteCount = 0;
+
+            Serial.printf("OTA in progress - T:%d|PPS:%d|BPS:%d|Q:%d\n", getConnectedTrackerCount(), pps, bytesPerSecond, queueSize());
+        }
+        return;
     }
 
     // PRIORITY 2: Handle pairing announcements - only when in pairing mode
@@ -694,4 +740,15 @@ bool ESPNowCommunication::deletePeer(const uint8_t peerMac[6]) {
 	for (size_t i = 0; i < maxQueueSize; ++i) if (memcmp(sendQueue[i].peerMac, peerMac, 6) == 0) sendQueue[i].skip = true; // Mark message to be skipped
 
     return result == ESP_OK;
+}
+
+void ESPNowCommunication::startOtaUpdate(const uint8_t auth[16], long port, const uint8_t ip[4], const char ssid[33], const char password[65]) {
+    memcpy(ota_auth, auth, sizeof(ota_auth));
+    ota_portNum = port;
+    memcpy(ota_ip, ip, sizeof(ota_ip));
+    memcpy(ota_ssid, ssid, sizeof(ota_ssid));
+    memcpy(ota_password, password, sizeof(ota_password));
+    
+    ota_in_progress = true;
+    ota_start_time = millis();
 }

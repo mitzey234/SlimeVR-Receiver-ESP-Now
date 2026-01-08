@@ -1,6 +1,7 @@
 #ifndef STATUS_STATUSMANAGER_H
 #define STATUS_STATUSMANAGER_H
 
+#include "Serial.h"
 #include "Status.h"
 #include "logging/Logger.h"
 

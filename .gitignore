@@ -1,3 +1,5 @@
+nodeProgram/config.json
+nodeProgram/node_modules/
 .pio
 .cache/
 .vscode/*

@@ -24,7 +24,6 @@
 #include "LEDManager.h"
 
 #include "GlobalVars.h"
-#include "Status.h"
 
 namespace SlimeVR {
 void LEDManager::setup() {

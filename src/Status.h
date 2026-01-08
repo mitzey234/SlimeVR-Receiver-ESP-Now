@@ -1,6 +1,8 @@
 #ifndef STATUS_STATUS_H
 #define STATUS_STATUS_H
 
+#include "Serial.h"
+
 namespace SlimeVR::Status {
 enum Status {
 	LOADING = 1 << 0,

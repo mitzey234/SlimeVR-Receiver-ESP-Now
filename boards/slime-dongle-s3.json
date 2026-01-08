@@ -42,7 +42,7 @@
   ],
   "name": "SlimeVR ESPNow Dongle",
     "upload": {
-      "flash_size": "16MB",
+      "flash_size": "8MB",
       "maximum_ram_size": 327680,
       "maximum_size": 16777216,
       "require_upload_port": true,

@@ -22,6 +22,7 @@
 */
 #pragma once
 
+#include <Arduino.h>
 #include "LEDManager.h"
 #include "StatusManager.h"
 

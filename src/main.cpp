@@ -7,22 +7,9 @@
 #include "packetHandling.h"
 #include "logging/Logger.h"
 #include "GlobalVars.h"
-#include <WiFi.h>
+#include "Serial.h"
 
-#include <Arduino.h>
-#include <USB.h>
-#include <USBCDC.h>
-
-
-/*
-* Todo:
-* [X] Connect to the PC through HID
-* [X] Enter pairing mode when long pressing button
-* - [ ] In pairing mode listen for pair requests and send out mac address
-* - [ ] Count the number of paired devices
-* [ ] Listen for incoming data packets and store them in a circular buffer
-* [ ] Send out data periodically to the PC
-*/
+#include "USB.h"
 
 HIDDevice hidDevice;
 Button &button = Button::getInstance();
@@ -32,66 +19,15 @@ SlimeVR::LEDManager ledManager;
 SlimeVR::Logging::Logger logger("Main");
 ConsoleCommandHandler consoleCommandHandler;
 
-bool started = false;
-
 void fail(ErrorCodes errorCode) {
-    
-}
-
-bool isBootModeActive() {
-    return digitalRead(BOOT_MODE_PIN) == BOOT_MODE_ACTIVE_LEVEL;
-}
-
-void debugPacket(const uint8_t packet[ESPNowCommunication::packetSizeBytes]) {
-    Serial.print("New packet: ");
-    for(int i = 0; i < ESPNowCommunication::packetSizeBytes; ++i) {
-        Serial.printf("%02x ", packet[i]);
-    }
-    Serial.println();
-}
-
-void start () {
-    if (!started) {
-        started = true;
-        hidDevice.begin();
-        uint8_t mac[6];
-            if (WiFi.getMode() == WIFI_MODE_NULL) {
-                WiFi.mode(WIFI_STA);
-                delay(100);
-            }
-            WiFi.macAddress(mac);
-
-            // Format for USB_SERIAL: SVRDG + last 6 hex digits (e.g., SVRDGA1B2C3D4E5F6)
-            char usbSerial[20] = "SVRDG";
-            // Append full MAC address (12 hex digits) to serial string
-            snprintf(usbSerial + 5, sizeof(usbSerial) - 5, "%02X%02X%02X%02X%02X%02X",
-                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-        Serial.printf("USB Serial Number: %s\n", usbSerial);
-        USB.serialNumber(usbSerial);
-        USB.begin();
-    }
-}
-
-void stop () {
-    if (started) {
-        Serial.println("Boot mode activated - resetting device...");
-        delay(100); // Allow serial message to be sent
-        ESP.restart();
-    }
+    Serial.printf("Fatal error occurred: %d\n", static_cast<uint8_t>(errorCode));
+    abort();
 }
 
 void setup() { 
-    Serial.begin(115200);
+    hidDevice.begin();
     Serial.println("Starting up " USB_PRODUCT "...");
 
-    // Initialize boot mode pin with pullup
-    pinMode(BOOT_MODE_PIN, INPUT_PULLUP);
-    
-    // Check if boot mode is active (pin pulled down)
-    if (isBootModeActive()) {
-        Serial.println("Boot mode active - USB/HID initialization delayed");
-    }
-    
     statusManager.setStatus(SlimeVR::Status::LOADING, true);
     ledManager.setup();
     Configuration::getInstance().setup();
@@ -103,16 +39,10 @@ void setup() {
         Serial.printf("MAC: %02x:%02x:%02x:%02x:%02x:%02x, TrackerID: %d\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], trackerId);
         found = true;
     });
+
     // If no paired trackers, print message
     // (forEachPairedTracker does nothing if none found)
-    if (!found) {
-        Serial.println("No paired trackers found.");
-    }
-
-    // Only start USB/HID if boot mode is not active
-    if (!isBootModeActive()) {
-        start();
-    }
+    if (!found) Serial.println("No paired trackers found.");
 
     button.begin();
 
@@ -176,23 +106,9 @@ void setup() {
 }
 
 void loop() {
-    // Check boot mode status and start/stop accordingly
-    if (isBootModeActive()) {
-        // Boot mode active - stop USB/HID if running
-        if (started) {
-            stop();
-        }
-    } else {
-        // Boot mode inactive - start USB/HID if not running
-        if (!started) {
-            Serial.println("Boot mode released - starting USB/HID");
-            start();
-        }
-    }
     button.update();
     ledManager.update();
     espnow.update();
-
 
     // Non-blocking serial command handler
     consoleCommandHandler.update();

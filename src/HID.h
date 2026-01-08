@@ -3,6 +3,7 @@
 #include <USBHID.h>
 #include <cstddef>
 #include <cstdint>
+#include "Serial.h"
 
 // HID Constants
 #define HID_USAGE_GEN_DESKTOP 0x01

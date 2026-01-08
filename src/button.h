@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional>
 #include <vector>
+#include "Serial.h"
 
 class Button {
 public:

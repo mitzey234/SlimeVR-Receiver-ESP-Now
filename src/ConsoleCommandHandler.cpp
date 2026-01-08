@@ -101,6 +101,115 @@ void ConsoleCommandHandler::update() {
                         } else {
                             Serial.println("[CMD] Invalid MAC address format. Use XX:XX:XX:XX:XX:XX");
                         }
+                } else if (serialBuffer.startsWith("startotaupdate ")) {
+                    String params = serialBuffer.substring(15);
+                    params.trim();
+
+                    // Parse auth token (32 hex chars = 16 bytes)
+                    int firstSpace = params.indexOf(' ');
+                    if (firstSpace != 32) {
+                        Serial.println("[CMD] Invalid format. Use: startotaupdate <32hex> <port> <ip> <ssid>\t<password>");
+                    } else {
+                        String authStr = params.substring(0, 32);
+                        uint8_t auth[16];
+                        bool valid = true;
+
+                        auto hexCharToNibble = [](char c) -> int {
+                            if (c >= '0' && c <= '9') return c - '0';
+                            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+                            if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+                            return -1;
+                        };
+
+                        for (int i = 0; i < 16; i++) {
+                            int hi = hexCharToNibble(authStr[2*i]);
+                            int lo = hexCharToNibble(authStr[2*i+1]);
+                            if (hi < 0 || lo < 0) { valid = false; break; }
+                            auth[i] = (hi << 4) | lo;
+                        }
+
+                        if (!valid) {
+                            Serial.println("[CMD] Invalid auth hex string.");
+                        } else {
+                            // Parse port
+                            String remaining = params.substring(33);
+                            int secondSpace = remaining.indexOf(' ');
+                            if (secondSpace == -1) {
+                                Serial.println("[CMD] Invalid format. Missing IP address.");
+                            } else {
+                                String portStr = remaining.substring(0, secondSpace);
+                                portStr.trim();
+                                long portNum = portStr.toInt();
+                                if (portNum < 1 || portNum > 65535) {
+                                    Serial.println("[CMD] Invalid port number. Use 1-65535.");
+                                } else {
+                                    uint16_t port = (uint16_t)portNum;
+
+                                    // Parse IP address
+                                    String ipAndRest = remaining.substring(secondSpace + 1);
+                                    ipAndRest.trim();
+                                    int thirdSpace = ipAndRest.indexOf(' ');
+                                    if (thirdSpace == -1) {
+                                        Serial.println("[CMD] Invalid format. Missing SSID and password.");
+                                    } else {
+                                        String ipStr = ipAndRest.substring(0, thirdSpace);
+                                        String ssidAndPass = ipAndRest.substring(thirdSpace + 1);
+                                        ipStr.trim();
+                                        ssidAndPass.trim();
+                                        uint8_t ip[4];
+                                        int lastIdx = 0;
+                                        valid = true;
+
+                                        for (int i = 0; i < 4; i++) {
+                                            int nextDot = ipStr.indexOf('.', lastIdx);
+                                            String octet = (nextDot == -1 && i == 3) ? ipStr.substring(lastIdx) : ipStr.substring(lastIdx, nextDot);
+                                            octet.trim();
+                                            long octetVal = octet.toInt();
+                                            if (octetVal < 0 || octetVal > 255) {
+                                                valid = false;
+                                                break;
+                                            }
+                                            ip[i] = (uint8_t)octetVal;
+                                            lastIdx = nextDot + 1;
+                                            if (i < 3 && nextDot == -1) {
+                                                valid = false;
+                                                break;
+                                            }
+                                        }
+
+                                        if (!valid) {
+                                            Serial.println("[CMD] Invalid IP address format.");
+                                        } else {
+                                            // Parse SSID and password separated by tab
+                                            int tabIdx = ssidAndPass.indexOf('\t');
+                                            if (tabIdx == -1) {
+                                                Serial.println("[CMD] Invalid format. SSID and password must be separated by a tab character.");
+                                            } else {
+                                                String ssidStr = ssidAndPass.substring(0, tabIdx);
+                                                String passStr = ssidAndPass.substring(tabIdx + 1);
+                                                ssidStr.trim();
+                                                passStr.trim();
+                                                char ssid[33] = {0};
+                                                char password[65] = {0};
+                                                ssidStr.toCharArray(ssid, sizeof(ssid));
+                                                passStr.toCharArray(password, sizeof(password));
+
+                                                Serial.println("OTAUPDATESTARTED");
+                                                Serial.print("[CMD] OTA Update - Auth: ");
+                                                for (int i = 0; i < 16; i++) Serial.printf("%02x", auth[i]);
+                                                Serial.printf(", Port: %u, IP: %u.%u.%u.%u\n", port, ip[0], ip[1], ip[2], ip[3]);
+                                                Serial.printf("[CMD] SSID: %s\n", ssid);
+                                                Serial.printf("[CMD] Password: %s\n", password);
+
+                                                // Start OTA update on all connected trackers (SSID/password not yet passed to OTA logic)
+                                                ESPNowCommunication::getInstance().startOtaUpdate(auth, port, ip, ssid, password);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 } else if (serialBuffer.equalsIgnoreCase("reboot") || serialBuffer.equalsIgnoreCase("restart")) {
                     Serial.println("[CMD] Rebooting device...");
                     delay(100);

@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include "Serial.h"
 
 class PacketHandling {
 public:

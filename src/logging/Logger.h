@@ -2,7 +2,7 @@
 #define LOGGING_LOGGER_H
 
 #include "Level.h"
-#include <Arduino.h>
+#include "Serial.h"
 
 #define LOG_LEVEL LOG_LEVEL_INFO
 

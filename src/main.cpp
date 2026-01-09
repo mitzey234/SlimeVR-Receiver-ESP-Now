@@ -80,8 +80,7 @@ void setup() {
     }
 
     espnow.onTrackerPaired([&]() { 
-        espnow.exitPairingMode();
-        statusManager.setStatus(SlimeVR::Status::PAIRING_MODE, false);
+        //espnow.exitPairingMode();
     });
 
     espnow.onTrackerConnected(

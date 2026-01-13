@@ -34,7 +34,7 @@ if (!fs.existsSync(CONFIG_PATH)) {
         fs.writeFileSync(CONFIG_PATH, JSON.stringify({
             PORT: 9000,
             HOST: "192.168.1.2",
-            OTAPORT: 3232,
+            OTAPORT: 8266,
             OTAPASSWORD: "SlimeVR-OTA",
             FILE: "./firmware.bin",
             SSID: "wifi-ssid",
@@ -129,7 +129,7 @@ class Handler {
     }
 
     handleMessage (msg, rinfo) {
-        console.log(`Received message from ${rinfo.address}:${rinfo.port}`);
+        //console.log(`Received message from ${rinfo.address}:${rinfo.port}`);
         if (msg.toString("hex") == verification) {
             // Tracker said hello with correct verification token
             this.gotTracker(rinfo.address);
@@ -145,8 +145,8 @@ class Handler {
     }
 
     gotTracker (ip) {
-        console.log(`Tracker ${ip} requested OTA update`);
         if (!this.trackers.has(ip)) {
+            console.log(`Tracker ${ip} requested OTA update`);
             let ota = new EspOTA();
             this.trackers.set(ip, ota);
             ota.setPassword(OTAPASSWORD);
@@ -173,11 +173,11 @@ class Handler {
     }
 
     handleState (ip, state) {
-        console.log(`Tracker ${ip} state: `, state);
+        console.log(`Tracker ${ip} state:`, state);
     }
 
     update () {
-        if (this.trackers.size > 0) console.log(Array.from(this.trackers.values()).map(d => d.progress + "%").join(" "))
+        if (this.trackers.size > 0) console.log("Connected: " + this.trackers.size, Array.from(this.trackers.values()).map(d => d.progress + "%").join(" "))
     }
 }
 
@@ -250,6 +250,21 @@ async function start () {
 
     console.log("Handler putting dongle into OTA mode");
     let dongle = new DongleHandler(port);
+}
+
+process.on("uncaughtException", handleCriticalFailure);
+process.on("unhandledRejection", handleCriticalFailure);
+
+function handleCriticalFailure (e) {
+    // Handle network connection errors that should not kill the service
+    if (e.code == "ECONNRESET" || e.code == "ECONNREFUSED" || e.code == "ETIMEDOUT" || e.code == "EPIPE") {
+        console.error("Network error (non-fatal):", e.code, e.message);
+        //console.trace();
+        return; // Don't exit - allow reconnection logic to handle it
+    }
+
+    console.error("Critical failure:", e);
+    process.exit(1);
 }
 
 start();

@@ -140,7 +140,7 @@ void ESPNowCommunication::disconnectAllTrackers() {
 }
 
 // Queue a message for sending with rate limiting
-void ESPNowCommunication::queueMessageMutex(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker, bool ephemeral) {
+void ESPNowCommunication::queueMessageMutex(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, bool isHeartbeat, bool ephemeral) {
     // Validate message data
     // Serial.printf("Queueing message to " MACSTR " of size %zu\n", MAC2ARGS(peerMac), dataLen);
     if (dataLen == 0 || dataLen > ESP_NOW_MAX_DATA_LEN) {
@@ -162,25 +162,25 @@ void ESPNowCommunication::queueMessageMutex(const uint8_t peerMac[6], const uint
     memcpy(msg.peerMac, peerMac, 6);
     memcpy(msg.data, data, dataLen);
     msg.dataLen = dataLen;
-    msg.tracker = tracker;
+    msg.isHeartbeat = isHeartbeat;
     msg.ephemeral = ephemeral;
     msg.skip = false;
     queueTail = nextTail;
 }
 
 // Queue a message for sending with rate limiting
-void ESPNowCommunication::queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker, bool ephemeral) {
-    queueMessageMutex(peerMac, data, dataLen, tracker, ephemeral);
+void ESPNowCommunication::queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, bool isHeartbeat, bool ephemeral) {
+    queueMessageMutex(peerMac, data, dataLen, isHeartbeat, ephemeral);
     processSendQueue();
 }
 
-void ESPNowCommunication::queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker) {
-    queueMessage(peerMac, data, dataLen, tracker, false);
+void ESPNowCommunication::queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, bool isHeartbeat) {
+    queueMessage(peerMac, data, dataLen, isHeartbeat, false);
 }
 
 // Overloaded method to queue a message without tracker pointer
 void ESPNowCommunication::queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen) {
-    queueMessage(peerMac, data, dataLen, nullptr, false);
+    queueMessage(peerMac, data, dataLen, false, false);
 }
 
 // Process queued messages with rate limiting
@@ -227,10 +227,9 @@ void ESPNowCommunication::processSendQueue() {
             deletePeer(msg.peerMac);
         }
 
-        if (msg.tracker != nullptr) {
+        if (msg.isHeartbeat) {
             // Update ping info if this message is associated with a tracker
-            msg.tracker->lastPingSent = currentTime;
-            msg.tracker->pingStartTime = currentTime;
+            lastHeartbeatCheck = currentTime;
         }
 
         if (result == ESP_OK) {
@@ -256,7 +255,7 @@ void ESPNowCommunication::sendUnpairToTracker(const uint8_t mac[6]) {
     memcpy(unpairMsg.securityBytes, securityCode, 8);
 	queueMessage(mac, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
 	queueMessage(mac, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
-	queueMessage(mac, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage), nullptr, true);
+	queueMessage(mac, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage), false, true);
 	// Serial.printf("Queued unpair to tracker " MACSTR "\n", MAC2ARGS(mac));
 }
 
@@ -267,7 +266,7 @@ void ESPNowCommunication::sendUnpairToAllTrackers() {
 
     queueMessage(broadcastAddress, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
     queueMessage(broadcastAddress, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
-    queueMessage(broadcastAddress, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
+    queueMessage(broadcastAddress, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage), false, true);
 
     // Serial.println("Unpair messages queued to all trackers");
 }
@@ -313,13 +312,14 @@ ErrorCodes ESPNowCommunication::begin() {
 
     WiFi.mode(WIFI_STA);
     WiFi.setChannel(channel);
-    WiFi.setTxPower(WIFI_POWER_17dBm);
-    esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11G);
+    WiFi.setTxPower(WIFI_POWER_19_5dBm); // Max power
+    esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11N | WIFI_PROTOCOL_11G);
     esp_wifi_set_ps(WIFI_PS_NONE);
 
     rate_config.phymode = WIFI_PHY_MODE_HT20;
-    rate_config.rate = WIFI_PHY_RATE_MCS7_SGI;
+    rate_config.rate = WIFI_PHY_RATE_MCS0_SGI;
     rate_config.ersu = false;
+    rate_config.dcm = true;
 
     auto result = esp_now_init();
     if (result != ESP_OK) {
@@ -399,7 +399,7 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         // Step 2: Send acknowledgment
         ESPNowPairingAckMessage ackMessage;
         // Serial.printf("Sending pairing acknowledgment to " MACSTR "\n", MAC2ARGS(senderInfo->src_addr));
-        queueMessage(senderInfo->src_addr, reinterpret_cast<uint8_t *>(&ackMessage), sizeof(ackMessage), nullptr, true);
+        queueMessage(senderInfo->src_addr, reinterpret_cast<uint8_t *>(&ackMessage), sizeof(ackMessage), false, true);
 
         // Step 3: Invoke paired event
         invokeTrackerPairedEvent();
@@ -450,7 +450,6 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         Tracker newTracker;
         memcpy(newTracker.mac.data(), senderInfo->src_addr, 6);
         newTracker.trackerId = trackerId;
-        newTracker.lastPingSent = 0;
         newTracker.waitingForResponse = false;
         newTracker.missedPings = 0;
         connectedTrackers.push_back(newTracker);
@@ -485,12 +484,12 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         if (tracker == nullptr) return;
         if (tracker->waitingForResponse) {
             // Validate sequence number matches expected
-            if (message->heartbeatResponse.sequenceNumber == tracker->expectedSequenceNumber) {
-                unsigned long latency = millis() - tracker->pingStartTime;
+            if (message->heartbeatResponse.sequenceNumber == expectedSequenceNumber) {
+                unsigned long latency = millis() - lastHeartbeatCheck;
                 tracker->latency = static_cast<uint8_t>(latency);
                 tracker->waitingForResponse = false;
                 tracker->missedPings = 0;
-                senderInfo->rx_ctrl->rssi;
+                tracker->rssi = senderInfo->rx_ctrl->rssi;
             }
             // If sequence number doesn't match, ignore the response (likely stale)
         }
@@ -516,7 +515,7 @@ void ESPNowCommunication::update() {
 
     // PRIORITY 1: Handle heartbeat system FIRST - critical for connection stability
     // Process heartbeats before stats/pairing to maintain accurate timing
-    if (!connectedTrackers.empty() && (currentTime - lastHeartbeatCheck >= heartbeatInterval+100)) {
+    if (!connectedTrackers.empty() && (currentTime - lastHeartbeatCheck >= heartbeatInterval)) {
         lastHeartbeatCheck = currentTime;
 
         //For each connected tracker
@@ -524,7 +523,7 @@ void ESPNowCommunication::update() {
             auto &tracker = *it;
 
             // Check if waiting for response and timeout has occurred
-            if (tracker.waitingForResponse && (currentTime - tracker.pingStartTime >= heartbeatTimeout)) {
+            if (tracker.waitingForResponse) {
                 tracker.missedPings++;
                 tracker.waitingForResponse = false;
                 Serial.printf("Missed heartbeat from tracker " MACSTR " (ID: %d), missed count: %d\n", MAC2ARGS(tracker.mac.data()), tracker.trackerId, tracker.missedPings);
@@ -551,22 +550,23 @@ void ESPNowCommunication::update() {
             }
 
             // Send heartbeat ping if interval has elapsed and not waiting for response
-            if (!tracker.waitingForResponse && (currentTime - tracker.lastPingSent >= heartbeatInterval)) {
-                // Generate random 16-bit sequence number using hardware RNG
-                tracker.expectedSequenceNumber = static_cast<uint16_t>(esp_random() & 0xFFFF);
-
-                // Create and send heartbeat echo message with sequence number
-                ESPNowHeartbeatEchoMessage heartbeatMsg;
-                heartbeatMsg.sequenceNumber = tracker.expectedSequenceNumber;
-
-                // Queue heartbeat through the rate-limited queue to prevent ESP_ERR_ESPNOW_NO_MEM
-                tracker.lastPingSent = currentTime;
-                tracker.pingStartTime = currentTime;
-                
-                // Serial.printf("Sending heartbeat echo to tracker " MACSTR " with sequence number %u\n", MAC2ARGS(tracker.mac.data()), heartbeatMsg.sequenceNumber);
-                queueMessage(tracker.mac.data(), reinterpret_cast<uint8_t *>(&heartbeatMsg), sizeof(ESPNowHeartbeatEchoMessage), &tracker);
+            if (!tracker.waitingForResponse) {
                 tracker.waitingForResponse = true;
+            } else {
+                Serial.printf("WARN: Tracker " MACSTR " (ID: %d) - still waiting for response\n", MAC2ARGS(tracker.mac.data()), tracker.trackerId);
             }
+
+            // Create and send heartbeat echo message with sequence number
+            // Serial.printf("Sending heartbeat echo to trackers with sequence number %u\n", heartbeatMsg.sequenceNumber);
+            auto lastExpectedSequenceNumber = expectedSequenceNumber;
+            expectedSequenceNumber = static_cast<uint16_t>(esp_random() & 0xFFFF);
+            if (expectedSequenceNumber == lastExpectedSequenceNumber) expectedSequenceNumber = (expectedSequenceNumber + 1) % 0x10000;
+            ESPNowHeartbeatEchoMessage heartbeatMsg;
+            heartbeatMsg.sequenceNumber = expectedSequenceNumber;
+            queueMessage(broadcastAddress, reinterpret_cast<uint8_t *>(&heartbeatMsg), sizeof(ESPNowHeartbeatEchoMessage), true);
+            queueMessage(broadcastAddress, reinterpret_cast<uint8_t *>(&heartbeatMsg), sizeof(ESPNowHeartbeatEchoMessage));
+            queueMessage(broadcastAddress, reinterpret_cast<uint8_t *>(&heartbeatMsg), sizeof(ESPNowHeartbeatEchoMessage));
+            lastHeartbeatCheck = currentTime;
 
             ++it;
         }
@@ -649,12 +649,12 @@ void ESPNowCommunication::update() {
             if (lat > highestLatency) highestLatency = lat;
 
             const int8_t rssi = tracker.rssi;
-            totalRssi += rssi;
-            if (rssi > maxRssi) maxRssi = rssi;
+            totalRssi += static_cast<long>(rssi); // Ensure signed addition
+            if (rssi < maxRssi) maxRssi = rssi;
         }
 
         const uint8_t avgLatency = trackerCount > 0 ? totalLatency / trackerCount : 0;
-        const int8_t avgRssi = trackerCount > 0 ? totalRssi / trackerCount : 0;
+        const int8_t avgRssi = trackerCount > 0 ? static_cast<int8_t>(totalRssi / static_cast<long>(trackerCount)) : 0;
 
         // Use shorter format to reduce blocking time
         Serial.printf("T:%d|L:%d/%dms|RSSI:%d/%ddBm|PPS:%d|BPS:%d|Q:%d\n", trackerCount, avgLatency, highestLatency, avgRssi, maxRssi, pps, bytesPerSecond, queueSize());

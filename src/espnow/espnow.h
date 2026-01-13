@@ -65,12 +65,9 @@ class ESPNowCommunication {
         struct Tracker {
             std::array<uint8_t, 6> mac;
             uint8_t trackerId;
-            unsigned long lastPingSent = 0;
-            unsigned long pingStartTime = 0;
             bool waitingForResponse = false;
             uint8_t missedPings = 0;
             uint8_t latency = 0;
-            uint16_t expectedSequenceNumber = 0;
             int8_t rssi = 0;  // Signal strength in dBm
         };
 
@@ -92,8 +89,8 @@ class ESPNowCommunication {
         std::vector<Tracker> connectedTrackers;
         
         static constexpr unsigned long heartbeatInterval = 1000; // 1 second
-        static constexpr unsigned long heartbeatTimeout = 1000; // 1 second timeout
         static constexpr uint8_t maxMissedPings = 5;
+        uint16_t expectedSequenceNumber = 0;
 
         std::vector<std::function<void()>> trackerPairedCallbacks;
         std::vector<std::function<void(const uint8_t *)>> trackerConnectedCallbacks;
@@ -112,7 +109,7 @@ class ESPNowCommunication {
             uint8_t data[ESP_NOW_MAX_DATA_LEN];
             size_t dataLen;
             bool ephemeral;
-            Tracker* tracker;  // Pointer to associated tracker for updating ping info
+            bool isHeartbeat;
             bool skip = false;
         };
         static constexpr size_t maxQueueSize = 64;
@@ -124,9 +121,9 @@ class ESPNowCommunication {
         }
         unsigned long lastSendTime = 0;
         static constexpr unsigned long sendRateLimit = 5;
-        void queueMessageMutex(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker, bool ephemeral);
-        void queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker, bool ephemeral);
-        void queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, Tracker* tracker);
+        void queueMessageMutex(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, bool isHeartbeat, bool ephemeral);
+        void queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, bool isHeartbeat, bool ephemeral);
+        void queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen, bool isHeartbeat);
         void queueMessage(const uint8_t peerMac[6], const uint8_t *data, size_t dataLen);
         void processSendQueue();
 

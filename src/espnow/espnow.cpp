@@ -313,7 +313,7 @@ ErrorCodes ESPNowCommunication::begin() {
     WiFi.mode(WIFI_STA);
     WiFi.setChannel(channel);
     WiFi.setTxPower(WIFI_POWER_19_5dBm); // Max power
-    esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11N | WIFI_PROTOCOL_11G);
+    esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11N);
     esp_wifi_set_ps(WIFI_PS_NONE);
 
     rate_config.phymode = WIFI_PHY_MODE_HT20;
@@ -556,20 +556,20 @@ void ESPNowCommunication::update() {
                 Serial.printf("WARN: Tracker " MACSTR " (ID: %d) - still waiting for response\n", MAC2ARGS(tracker.mac.data()), tracker.trackerId);
             }
 
-            // Create and send heartbeat echo message with sequence number
-            // Serial.printf("Sending heartbeat echo to trackers with sequence number %u\n", heartbeatMsg.sequenceNumber);
-            auto lastExpectedSequenceNumber = expectedSequenceNumber;
-            expectedSequenceNumber = static_cast<uint16_t>(esp_random() & 0xFFFF);
-            if (expectedSequenceNumber == lastExpectedSequenceNumber) expectedSequenceNumber = (expectedSequenceNumber + 1) % 0x10000;
-            ESPNowHeartbeatEchoMessage heartbeatMsg;
-            heartbeatMsg.sequenceNumber = expectedSequenceNumber;
-            queueMessage(broadcastAddress, reinterpret_cast<uint8_t *>(&heartbeatMsg), sizeof(ESPNowHeartbeatEchoMessage), true);
-            queueMessage(broadcastAddress, reinterpret_cast<uint8_t *>(&heartbeatMsg), sizeof(ESPNowHeartbeatEchoMessage));
-            queueMessage(broadcastAddress, reinterpret_cast<uint8_t *>(&heartbeatMsg), sizeof(ESPNowHeartbeatEchoMessage));
-            lastHeartbeatCheck = currentTime;
-
             ++it;
         }
+
+        // Create and send heartbeat echo message with sequence number
+        // Serial.printf("Sending heartbeat echo to trackers with sequence number %u\n", heartbeatMsg.sequenceNumber);
+        auto lastExpectedSequenceNumber = expectedSequenceNumber;
+        expectedSequenceNumber = static_cast<uint16_t>(esp_random() & 0xFFFF);
+        if (expectedSequenceNumber == lastExpectedSequenceNumber) expectedSequenceNumber = (expectedSequenceNumber + 1) % 0x10000;
+        ESPNowHeartbeatEchoMessage heartbeatMsg;
+        heartbeatMsg.sequenceNumber = expectedSequenceNumber;
+        queueMessage(broadcastAddress, reinterpret_cast<uint8_t *>(&heartbeatMsg), sizeof(ESPNowHeartbeatEchoMessage), true);
+        queueMessage(broadcastAddress, reinterpret_cast<uint8_t *>(&heartbeatMsg), sizeof(ESPNowHeartbeatEchoMessage));
+        queueMessage(broadcastAddress, reinterpret_cast<uint8_t *>(&heartbeatMsg), sizeof(ESPNowHeartbeatEchoMessage));
+        lastHeartbeatCheck = currentTime;
     }
 
     // Skip lower priority tasks if an OTA update is in progress

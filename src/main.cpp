@@ -47,30 +47,20 @@ void setup() {
     button.begin();
 
     button.onLongPress([]() {
-        Serial.println("Trackers reset");
-        statusManager.setStatus(SlimeVR::Status::RESETTING, true);
-        Configuration::getInstance().clearAllPairedTrackers();
-        espnow.sendUnpairToAllTrackers();
-        espnow.disconnectAllTrackers();
-        Configuration::getInstance().resetSecurityCode();
-
-        // Blink LED twice to indicate reset action
-        ledManager.pattern(500, 300, 2);
-        
-        // Clear resetting status after completion
-        statusManager.setStatus(SlimeVR::Status::RESETTING, false);
-        return;
+        espnow.UnpairAllTrackers();
     });
     
     button.onMultiPress([](size_t pressCount) {
         if (pressCount == 1) {
             if (!espnow.isInPairingMode()) {
-                Serial.println("Pairing mode enabled");
                 espnow.enterPairingMode();
             } else {
-                Serial.println("Pairing mode disabled");
                 espnow.exitPairingMode();
             }
+        } else if (pressCount >= 2) {
+            if (espnow.isScanningEnvironment()) return;
+            Serial.println("Starting environment scanning");
+            ESPNowCommunication::getInstance().enterEnvironmentScanningMode();
         }
     });
 

@@ -102,12 +102,19 @@ bool ESPNowCommunication::isTrackerIdConnected(uint8_t trackerId) const {
 
 // Enters pairing mode
 void ESPNowCommunication::enterPairingMode() {
+    if (scanningEnvironment) {
+        Serial.println("Cannot enter pairing mode while scanning environment");
+        return;
+    }
+    Serial.println("Entering pairing mode");
     pairing = true;
+    pairingStartTime = millis();
     statusManager.setStatus(SlimeVR::Status::PAIRING_MODE, true);
 }
 
 // Exits pairing mode
 void ESPNowCommunication::exitPairingMode() {
+    Serial.println("Exiting pairing mode");
     pairing = false;
     statusManager.setStatus(SlimeVR::Status::PAIRING_MODE, false);
 }
@@ -345,11 +352,22 @@ ErrorCodes ESPNowCommunication::begin() {
     WiFi.macAddress(macaddr);
 
     Serial.printf("[ESPNOW] address: %02x:%02x:%02x:%02x:%02x:%02x Channel: %d\n", macaddr[0], macaddr[1], macaddr[2], macaddr[3], macaddr[4], macaddr[5], WiFi.channel());
+
+    if (Configuration::getInstance().wifiChannelFileExists()) {
+        Serial.printf("[ESPNOW] Using saved WiFi channel: %d\n", channel);
+    } else {
+        Serial.println("[ESPNOW] No saved WiFi channel found, scanning environment...");
+        enterEnvironmentScanningMode();
+    }
     return ErrorCodes::NO_ERROR;
 }
 
 // ESPNOW receive callback
 void ESPNowCommunication::onReceive(const esp_now_recv_info_t *senderInfo, const uint8_t *data, int dataLen) {
+    if (ESPNowCommunication::getInstance().isScanningEnvironment()) {
+        // Ignore received packets while in scanning mode
+        return;
+    }
     ESPNowCommunication::getInstance().handleMessage(senderInfo, data, dataLen);
 }
 
@@ -400,6 +418,8 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         ESPNowPairingAckMessage ackMessage;
         // Serial.printf("Sending pairing acknowledgment to " MACSTR "\n", MAC2ARGS(senderInfo->src_addr));
         queueMessage(senderInfo->src_addr, reinterpret_cast<uint8_t *>(&ackMessage), sizeof(ackMessage), false, true);
+
+        pairingStartTime = millis();
 
         // Step 3: Invoke paired event
         invokeTrackerPairedEvent();
@@ -509,6 +529,128 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
     }
 }
 
+// Store total bytes seen per channel (channels 1-11)
+static uint32_t channelBytesSeen[12] = {0};
+
+void ESPNowCommunication::rxPromiscuousPacket(void* buf, wifi_promiscuous_pkt_type_t type) {
+    wifi_promiscuous_pkt_t* pkt = (wifi_promiscuous_pkt_t*)buf;
+    int len = pkt->rx_ctrl.sig_len;
+    int channel = WiFi.channel();
+    int8_t rssi = pkt->rx_ctrl.rssi;
+    // Define a multiplier based on RSSI: stronger signals get higher multiplier
+    // Example: RSSI >= -60: x4, -70 to -61: x3, -80 to -71: x2, else x1
+    int multiplier = 1;
+    if (rssi >= -20) {
+        multiplier = 9;
+    } else if (rssi >= -30) {
+        multiplier = 8;
+    } else if (rssi >= -40) {
+        multiplier = 7;
+    } else if (rssi >= -50) {
+        multiplier = 6;
+    } else if (rssi >= -60) {
+        multiplier = 4;
+    } else if (rssi >= -70) {
+        multiplier = 3;
+    } else if (rssi >= -80) {
+        multiplier = 2;
+    }
+    if (channel >= 1 && channel <= 11) {
+        channelBytesSeen[channel] += len * multiplier;
+    }
+    // Optionally print debug info
+    //Serial.printf("Promiscuous packet received: type=%d, len=%d, channel=%d, rssi=%d, mult=%d, total=%u\n", type, len, channel, rssi, multiplier, channelBytesSeen[channel]);
+}
+
+void ESPNowCommunication::scanningLoop() {
+    if (!enteredPromiscuousMode) {
+        //Reset channel byte counts
+        memset(channelBytesSeen, 0, sizeof(channelBytesSeen));
+
+        if (pairing) exitPairingMode();
+
+        statusManager.setStatus(SlimeVR::Status::SCANNING, true);
+        disconnectAllTrackers(); // Ensure all trackers are disconnected before scanning
+        WiFi.setChannel(1);
+        scanningChannelStartTime = millis();
+        auto result = esp_wifi_set_promiscuous(true);
+        if (result != ESP_OK) {
+            Serial.printf("Failed to enter promiscuous mode: %s\n", espNowErrorToString(result).c_str());
+            return;
+        }
+        esp_wifi_set_promiscuous_filter(&filt);
+        esp_wifi_set_promiscuous_rx_cb([](void* buf, wifi_promiscuous_pkt_type_t type) {
+            ESPNowCommunication::getInstance().rxPromiscuousPacket(buf, type);
+        });
+        enteredPromiscuousMode = true;
+        Serial.println("Entered promiscuous mode for environment scanning");
+    }
+
+    // Print current channel metrics every second
+    static unsigned long lastMetricsPrint = 0;
+    if (millis() - lastMetricsPrint >= 1000) {
+        lastMetricsPrint = millis();
+        uint8_t currentChannel = WiFi.channel();
+        unsigned long elapsedTime = millis() - scanningChannelStartTime;
+        Serial.printf("Scanning Channel %2d: %10u bytes (%lu ms elapsed)\n", currentChannel, channelBytesSeen[currentChannel], elapsedTime);
+    }
+    
+    if (millis() - scanningChannelStartTime >= scanningChannelDuration) {
+        uint8_t currentChannel = WiFi.channel();
+        if (currentChannel >= 11) {
+            // Finished scanning all channels
+            esp_wifi_set_promiscuous(false);
+            enteredPromiscuousMode = false;
+            Serial.println("Exited promiscuous mode, finished environment scanning");
+            // Print channel statistics
+            Serial.println("Channel activity summary (bytes seen):");
+            // Find the channel with the lowest byte count
+            uint32_t minBytes = channelBytesSeen[1];
+            int bestChannel = 1;
+            // Track min for primary channels
+            int primaryChannels[3] = {1, 6, 11};
+            int bestPrimary = -1;
+            uint32_t minPrimaryBytes = UINT32_MAX;
+            for (int ch = 1; ch <= 11; ++ch) {
+                Serial.printf("Channel %2d: %10u bytes\n", ch, channelBytesSeen[ch]);
+                if (channelBytesSeen[ch] < minBytes) {
+                    minBytes = channelBytesSeen[ch];
+                    bestChannel = ch;
+                }
+            }
+            // Check if any primary channel is as good as the best
+            for (int i = 0; i < 3; ++i) {
+                int ch = primaryChannels[i];
+                if (channelBytesSeen[ch] <= minBytes * 1.1) { // Allow up to 10% worse than absolute best
+                    if (channelBytesSeen[ch] < minPrimaryBytes) {
+                        minPrimaryBytes = channelBytesSeen[ch];
+                        bestPrimary = ch;
+                    }
+                }
+            }
+            if (bestPrimary != -1) {
+                Serial.printf("Best channel to use (primary preferred): %d (activity: %u bytes)\n", bestPrimary, channelBytesSeen[bestPrimary]);
+                Configuration::getInstance().setWifiChannel((uint8_t)bestPrimary);
+            } else {
+                Serial.printf("Best channel to use: %d (lowest activity: %u bytes)\n", bestChannel, minBytes);
+                Configuration::getInstance().setWifiChannel((uint8_t)bestChannel);
+            }
+
+            //Restart wifi
+            begin();
+            scanningEnvironment = false;
+            statusManager.setStatus(SlimeVR::Status::SCANNING, false);
+        } else {
+            // Move to next channel
+            WiFi.setChannel(WiFi.channel() + 1);
+            scanningChannelStartTime = millis();
+            // Calculate scan progress percentage (channels 1-11)
+            int percent = ((currentChannel) * 100) / 11;
+            Serial.printf("Switched to channel %d for scanning (%d%% complete)\n", currentChannel + 1, percent);
+        }
+    }
+}
+
 // Main update loop to be called regularly
 void ESPNowCommunication::update() {
     const unsigned long currentTime = millis();
@@ -608,21 +750,33 @@ void ESPNowCommunication::update() {
             const int bytesPerSecond = (recievedByteCount * 1000) / deltaTime;
             recievedByteCount = 0;
 
-            Serial.printf("OTA in progress - T:%d|PPS:%d|BPS:%d|Q:%d\n", getConnectedTrackerCount(), pps, bytesPerSecond, queueSize());
+            Serial.printf("T:%d|Q:%d|OTA:1\n", getConnectedTrackerCount(), queueSize());
         }
         return;
     }
 
+    // Skip other tasks if scanning environment
+    if (scanningEnvironment) {
+        scanningLoop();
+        return;
+    }
+
     // PRIORITY 2: Handle pairing announcements - only when in pairing mode
-    if (pairing && (currentTime - lastPairingBroadcast >= pairingBroadcastInterval)) {
-        lastPairingBroadcast = currentTime;
+    if (pairing) {
+        // Check for pairing mode expiry (60 seconds)
+        if (currentTime - pairingStartTime >= 60000) {
+            Serial.println("[PAIRING] Pairing mode expired after 60 seconds.");
+            exitPairingMode();
+        } else if (currentTime - lastPairingBroadcast >= pairingBroadcastInterval) {
+            lastPairingBroadcast = currentTime;
 
-        ESPNowPairingAnnouncementMessage announcement;
-        announcement.channel = channel;
-        memcpy(announcement.securityBytes, securityCode, 8);
+            ESPNowPairingAnnouncementMessage announcement;
+            announcement.channel = channel;
+            memcpy(announcement.securityBytes, securityCode, 8);
 
-        // Serial.println("Broadcasting pairing announcement");
-        queueMessage(broadcastAddress, reinterpret_cast<uint8_t *>(&announcement), sizeof(announcement));
+            // Serial.println("Broadcasting pairing announcement");
+            queueMessage(broadcastAddress, reinterpret_cast<uint8_t *>(&announcement), sizeof(announcement));
+        }
     }
 
     // PRIORITY 3: Print tracker statistics (lowest priority - can be skipped if timing is tight)
@@ -639,7 +793,7 @@ void ESPNowCommunication::update() {
         // Calculate latency and RSSI stats in single pass
         uint8_t highestLatency = 0;
         unsigned long totalLatency = 0;
-        int8_t maxRssi = -128; // Start with minimum possible RSSI
+        int8_t maxRssi = 0; // Start with minimum possible RSSI
         long totalRssi = 0;
         const size_t trackerCount = connectedTrackers.size();
 
@@ -751,4 +905,27 @@ void ESPNowCommunication::startOtaUpdate(const uint8_t auth[16], long port, cons
     
     ota_in_progress = true;
     ota_start_time = millis();
+}
+
+void ESPNowCommunication::exitEnvironmentScanningMode() {
+    if (enteredPromiscuousMode) {
+        auto result = esp_wifi_set_promiscuous(false);
+        if (result != ESP_OK) Serial.printf("Failed to exit promiscuous mode, error: %s\n", espNowErrorToString(result).c_str());
+        enteredPromiscuousMode = false;
+        Serial.println("Exited promiscuous mode, stopping environment scanning");
+    }
+    begin();
+    scanningEnvironment = false;
+    statusManager.setStatus(SlimeVR::Status::SCANNING, true);
+}
+
+void ESPNowCommunication::UnpairAllTrackers() {
+    Serial.println("Trackers reset");
+    Configuration::getInstance().clearAllPairedTrackers();
+    sendUnpairToAllTrackers();
+    disconnectAllTrackers();
+    Configuration::getInstance().resetSecurityCode();
+
+    // Blink LED twice to indicate reset action
+    ledManager.pattern(500, 300, 2);
 }

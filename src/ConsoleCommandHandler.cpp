@@ -11,10 +11,11 @@ void ConsoleCommandHandler::update() {
             serialBuffer.trim();
             if (serialBuffer.length() > 0) {
                 if (serialBuffer.equalsIgnoreCase("factoryreset")) {
-                    Serial.println("[CMD] Factory reset: deleting pairedTrackers.bin, securityCode.bin, trackerIds.bin");
+                    Serial.println("[CMD] Factory reset: deleting pairedTrackers.bin, securityCode.bin, trackerIds.bin, wifiChannel.bin");
                     LittleFS.remove("/pairedTrackers.bin");
                     LittleFS.remove("/securityCode.bin");
                     LittleFS.remove("/trackerIds.bin");
+                    LittleFS.remove("/wifiChannel.bin");
                     Serial.println("[CMD] Factory reset complete");
                     ESP.restart();
                 } else if (serialBuffer.equalsIgnoreCase("pair")) {
@@ -217,8 +218,21 @@ void ConsoleCommandHandler::update() {
                 } else if (serialBuffer.equalsIgnoreCase("getchannel")) {
                     int ch = WiFi.channel();
                     Serial.printf("[CMD] Current WiFi channel: %d\n", ch);
+                } else if (serialBuffer.equalsIgnoreCase("scanenv")) {
+                    bool scanning = ESPNowCommunication::getInstance().isScanningEnvironment();
+                    if (!scanning) {
+                        ESPNowCommunication::getInstance().enterEnvironmentScanningMode();
+                        Serial.println("[CMD] Environment scanning mode enabled.");
+                    } else {
+                        ESPNowCommunication::getInstance().exitEnvironmentScanningMode();
+                        Serial.println("[CMD] Environment scanning mode disabled.");
+                    }
+                } else if (serialBuffer.equalsIgnoreCase("unpairall")) {
+                    Serial.println("[CMD] Unpairing and disconnecting all trackers...");
+                    // Remove all paired trackers
+                    ESPNowCommunication::getInstance().UnpairAllTrackers();
                 } else {
-                    Serial.println("[CMD] Unknown command. Available: factoryreset, setsecurity <16hex>, setchannel <num>, getchannel, pair, reboot");
+                    Serial.println("[CMD] Unknown command. Available: factoryreset, setsecurity <16hex>, setchannel <num>, getchannel, pair, unpair <MAC>, unpairall, scanenv, startotaupdate <auth> <port> <ip> <ssid>\\t<pass>, reboot");
                 }
             }
             serialBuffer = "";

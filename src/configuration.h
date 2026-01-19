@@ -34,6 +34,7 @@ public:
     // Tracker ID management (persistent)
     uint8_t getTrackerIdForMac(const uint8_t mac[6]);  // Returns existing or allocates new ID
     uint8_t allocateTrackerIdForMac(const uint8_t mac[6]);  // Internal: finds first available ID
+    bool wifiChannelFileExists();
 
 private:
     Configuration() = default;

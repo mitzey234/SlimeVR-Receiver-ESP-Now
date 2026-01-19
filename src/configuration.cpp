@@ -63,6 +63,10 @@ uint8_t Configuration::getWifiChannel() {
     return channel;
 }
 
+bool Configuration::wifiChannelFileExists() {
+    return LittleFS.exists(Configuration::wifiChannelPath);
+}
+
 // Get all paired tracker MACs
 std::vector<std::array<uint8_t, 6>> Configuration::getAllPairedTrackerMacs() {
     std::vector<std::array<uint8_t, 6>> macs;

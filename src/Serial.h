@@ -29,7 +29,7 @@ public:
         size_t n = 0;
         n += uart->write(c);
         // Only write to USB if connected
-        if (usb && usb->availableForWrite()) {
+        if (usb && usb->availableForWrite() > 0) {
             n += usb->write(c);
         }
         return n;
@@ -39,7 +39,7 @@ public:
         size_t n = 0;
         n += uart->write(buffer, size);
         // Only write to USB if connected
-        if (usb && usb->availableForWrite()) {
+        if (usb && usb->availableForWrite() > 0) {
             n += usb->write(buffer, size);
         }
         return n;

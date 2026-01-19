@@ -47,6 +47,11 @@ class ESPNowCommunication {
 
         void startOtaUpdate(const uint8_t auth[16], long port, const uint8_t ip[4], const char ssid[33], const char password[65]);
 
+        void enterEnvironmentScanningMode() { scanningEnvironment = true; }
+        void exitEnvironmentScanningMode();
+        bool isScanningEnvironment() const { return scanningEnvironment; }
+        void UnpairAllTrackers();
+
     private:
         static ESPNowCommunication instance;
         ESPNowCommunication() = default;
@@ -100,6 +105,7 @@ class ESPNowCommunication {
         static constexpr uint8_t espnowWifiChannel = 6;
 
         unsigned long lastPairingBroadcast = 0;
+        unsigned long pairingStartTime = 0;
         unsigned long lastHeartbeatCheck = 0;
         static constexpr unsigned long pairingBroadcastInterval = 100;
 
@@ -152,4 +158,13 @@ class ESPNowCommunication {
         bool ota_in_progress = false;
         unsigned long ota_start_time = 0;
         unsigned long ota_last_send_time = 0;
+
+        const wifi_promiscuous_filter_t filt={.filter_mask=WIFI_PROMIS_FILTER_MASK_ALL | WIFI_PROMIS_CTRL_FILTER_MASK_ALL};
+        bool scanningEnvironment = false;
+        bool enteredPromiscuousMode = false;
+        long unsigned long scanningChannelStartTime = 0;
+        long unsigned int scanningChannelDuration = 5000; // 5 seconds per channel
+        void scanningLoop();
+        void rxPromiscuousPacket(void* buf, wifi_promiscuous_pkt_type_t type);
+
 };

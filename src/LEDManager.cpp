@@ -74,7 +74,21 @@ void LEDManager::update() {
 	unsigned int length = 0;
 	unsigned int count = 0;
 
-	 if (statusManager.hasStatus(Status::PAIRING_MODE)) {
+	 if (statusManager.hasStatus(Status::SCANNING)) {
+		count = SCANNING_COUNT;
+		switch (m_CurrentStage) {
+			case ON:
+			case OFF:
+				length = SCANNING_LENGTH;
+				break;
+			case GAP:
+				length = SCANNING_GAP;
+				break;
+			case INTERVAL:
+				length = SCANNING_INTERVAL;
+				break;
+		}
+	 } else if (statusManager.hasStatus(Status::PAIRING_MODE)) {
 		count = PAIRING_MODE_COUNT;
 		switch (m_CurrentStage) {
 			case ON:

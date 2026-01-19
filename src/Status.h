@@ -9,6 +9,7 @@ enum Status {
 	PAIRING_MODE = 1 << 1,
 	READY = 1 << 2,
 	RESETTING = 1 << 3,
+	SCANNING = 1 << 4
 };
 
 const char* statusToString(Status status);

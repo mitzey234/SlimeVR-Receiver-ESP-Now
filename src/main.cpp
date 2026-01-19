@@ -47,6 +47,10 @@ void setup() {
     button.begin();
 
     button.onLongPress([]() {
+        if (espnow.isScanningEnvironment()) {
+            espnow.exitEnvironmentScanningMode();
+            return;
+        }
         espnow.UnpairAllTrackers();
     });
     

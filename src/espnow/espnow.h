@@ -166,5 +166,6 @@ class ESPNowCommunication {
         long unsigned int scanningChannelDuration = 5000; // 5 seconds per channel
         void scanningLoop();
         void rxPromiscuousPacket(void* buf, wifi_promiscuous_pkt_type_t type);
+        int scansRun = 0;
 
 };

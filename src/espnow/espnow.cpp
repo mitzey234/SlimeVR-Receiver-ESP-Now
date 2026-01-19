@@ -595,10 +595,11 @@ void ESPNowCommunication::scanningLoop() {
         Serial.printf("Scanning Channel %2d: %10u bytes (%lu ms elapsed)\n", currentChannel, channelBytesSeen[currentChannel], elapsedTime);
     }
     
-    if (millis() - scanningChannelStartTime >= scanningChannelDuration) {
+    if (millis() - scanningChannelStartTime >= scansRun >= 1 ? scanningChannelDuration*2 : scanningChannelDuration) {
         uint8_t currentChannel = WiFi.channel();
         if (currentChannel >= 11) {
             // Finished scanning all channels
+            scansRun++;
             esp_wifi_set_promiscuous(false);
             enteredPromiscuousMode = false;
             Serial.println("Exited promiscuous mode, finished environment scanning");

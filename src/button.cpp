@@ -27,39 +27,48 @@ void Button::update() {
     auto buttonState = isButtonPressed();
     auto elapsedMillis = millis() - lastButtonChangeMillis;
 
+    // Require minimum debounce time (50ms) before recognizing state changes
+    const unsigned long minDebounceTime = 50;
+
+    // Detect button release (pressed -> not pressed)
+    if (!buttonState && lastButtonState) {
+        if (elapsedMillis >= minDebounceTime) {
+            pressCount++;
+            lastButtonChangeMillis = millis();
+        }
+    }
+
+    // Detect button idle (not pressed for a while)
     if (!buttonState && !lastButtonState) {
         if (elapsedMillis < multiPressMaxDelaySeconds * 1e3) {
+            lastButtonState = buttonState;
             return;
         }
-
         if (pressCount >= 1) {
             invokeMultiPressCallbacks(pressCount);
             pressCount = 0;
         }
-
         polling = false;
         attach();
+        lastButtonState = buttonState;
         return;
     }
 
+    // Detect long press (held down)
     if (buttonState && lastButtonState) {
         if (elapsedMillis < longPressSeconds * 1e3 || pressCount > 0) {
+            lastButtonState = buttonState;
             return;
         }
-
         invokeLongPressCallbacks();
         pressCount = 0;
         polling = false;
         attach();
+        lastButtonState = buttonState;
         return;
     }
 
-    if (!buttonState) {
-        pressCount++;
-    }
-
     lastButtonState = buttonState;
-    lastButtonChangeMillis = millis();
 }
 
 void Button::initDebouncing(bool state) {
@@ -75,7 +84,7 @@ bool Button::isButtonPressed() {
 
     uint8_t popCount = __builtin_popcount(circularBuffer);
 
-    return popCount > 16;
+    return popCount > 12;  // Require at least 13 out of 16 samples to be high
 }
 
 void Button::onLongPress(std::function<void()> callback) {

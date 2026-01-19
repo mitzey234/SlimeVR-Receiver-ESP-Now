@@ -28,7 +28,7 @@ connect to its saved dongle.
 
 If everything went as expected, the tracker should now appear in the SlimeVR server.
 
-If the dongle LED flashes with longer flashes after being plugged in, it means it is scanning the wireless environment for the best channel to use. This process is necessary for optimal performance, and it only happens the first time the dongle is powered on. Once the scanning is complete, the dongle will save the best channel found and use it for future connections. The LED will stop flashing rapidly once the scanning is complete.
+If the dongle LED flashes with longer flashes after being plugged in, it means it is scanning the wireless environment for the best channel to use. This process is necessary for optimal performance, and it only happens the first time the dongle is powered on. Once the scanning is complete, the dongle will save the best channel found and use it for future connections. The LED will stop flashing rapidly once the scanning is complete. You can also exit the scanning mode manually by pressing and holding the button on the dongle for 5 seconds (it will not unpair your trackers).
 
 To rescan the environment, press the button on the dongle twice quickly. Note that you cannot enter pairing mode while the dongle is scanning the environment.
 

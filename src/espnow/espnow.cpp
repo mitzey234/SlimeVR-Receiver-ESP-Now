@@ -127,7 +127,7 @@ bool ESPNowCommunication::disconnectSingleTracker(const uint8_t mac[6]) {
             uint8_t trackerId = it->trackerId;
             deletePeer(mac);
             connectedTrackers.erase(it);
-            Serial.printf("[ESPNOW] Disconnected tracker %02x:%02x:%02x:%02x:%02x:%02x (ID: %d)\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], trackerId);
+            Serial.printf("Disconnected tracker %02x:%02x:%02x:%02x:%02x:%02x (ID: %d)\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], trackerId);
             invokeTrackerDisconnectedEvent(trackerId);
             sendRateUpdateNextTick = true;
             return true;
@@ -217,7 +217,7 @@ void ESPNowCommunication::processSendQueue() {
 
         // Ensure peer is added before sending
         if (!esp_now_is_peer_exist(msg.peerMac)) {
-            Serial.printf("Peer " MACSTR " not found, adding before sending queued message\n", MAC2ARGS(msg.peerMac));
+            //Serial.printf("Peer " MACSTR " not found, adding before sending queued message\n", MAC2ARGS(msg.peerMac));
             auto addResult = addPeer(msg.peerMac);
             if (addResult != ESP_OK) {
                 Serial.printf("Failed to add peer " MACSTR " for queued message, error: %s (%d)\n", MAC2ARGS(msg.peerMac), espNowErrorToString(addResult).c_str(), addResult);
@@ -475,7 +475,7 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         newTracker.missedPings = 0;
         connectedTrackers.push_back(newTracker);
 
-        Serial.printf("Device with mac address " MACSTR " connected with tracker id %d!\n", MAC2ARGS(senderInfo->src_addr), trackerId);
+        Serial.printf("Connected tracker " MACSTR " (ID: %d)\n", MAC2ARGS(senderInfo->src_addr), trackerId);
 
         // Step 4: Send rate update to newly connected trackers
         sendRateUpdateNextTick = true;
@@ -740,7 +740,7 @@ void ESPNowCommunication::update() {
                 // Remove tracker if exceeded max missed pings
                 if (tracker.missedPings >= maxMissedPings)
                 {
-                    Serial.printf("Removing tracker " MACSTR " (ID: %d) due to missed heartbeats\n", MAC2ARGS(tracker.mac.data()), tracker.trackerId);
+                    //Serial.printf("Removing tracker " MACSTR " (ID: %d) due to missed heartbeats\n", MAC2ARGS(tracker.mac.data()), tracker.trackerId);
                     disconnectSingleTracker(tracker.mac.data());
                     continue; // Skip increment since we erased
                 }
@@ -911,7 +911,7 @@ uint8_t ESPNowCommunication::addPeer(const uint8_t peerMac[6], bool defaultConfi
         Serial.printf("Peer " MACSTR " already exists.\n", MAC2ARGS(peerMac));
         return ESP_OK; // Peer already exists, return success
     }
-    
+
     //Serial.printf("Adding peer " MACSTR "\n", MAC2ARGS(peerMac));
 
     esp_now_peer_info_t peer;

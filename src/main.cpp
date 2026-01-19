@@ -79,7 +79,6 @@ void setup() {
 
     espnow.onTrackerConnected(
         [&](const uint8_t *trackerMacAddress) {
-            Serial.println("New tracker connected");
             uint8_t packet[16];
             packet[0] = 0xff;
             memcpy(&packet[2], trackerMacAddress, sizeof(uint8_t) * 6);
@@ -89,7 +88,7 @@ void setup() {
 
     espnow.onTrackerDisconnected(
         [&](uint8_t trackerId) {
-            Serial.printf("Tracker %d disconnected, sending status packet\n", trackerId);
+            //Serial.printf("Tracker %d disconnected, sending status packet\n", trackerId);
             PacketHandling::getInstance().sendDisconnectionStatus(trackerId);
     });
 

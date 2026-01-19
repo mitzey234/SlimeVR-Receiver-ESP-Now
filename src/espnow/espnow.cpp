@@ -7,6 +7,7 @@
 #include <esp_wifi.h>
 #include <string>
 #include "../GlobalVars.h"
+#include <set>
 
 // Ensure StatusManager type is defined before extern declaration
 // Use the global StatusManager instance defined in main.cpp
@@ -532,11 +533,54 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
 // Store total bytes seen per channel (channels 1-11)
 static uint32_t channelBytesSeen[12] = {0};
 
+static std::set<uint64_t> channelBSSIDs[12];
+
 void ESPNowCommunication::rxPromiscuousPacket(void* buf, wifi_promiscuous_pkt_type_t type) {
     wifi_promiscuous_pkt_t* pkt = (wifi_promiscuous_pkt_t*)buf;
     int len = pkt->rx_ctrl.sig_len;
     int channel = WiFi.channel();
     int8_t rssi = pkt->rx_ctrl.rssi;
+    
+    // Detect and print WiFi beacon frames (SSID broadcasts)
+    if (type == WIFI_PKT_MGMT) {
+        // WiFi management frame structure
+        const uint8_t* payload = pkt->payload;
+        const uint8_t frameType = payload[0];
+        
+        // Check if this is a beacon frame (type 0x80)
+        if (frameType == 0x80) {
+            // SSID is in the tagged parameters starting at offset 36
+            const uint8_t* ssidTag = &payload[36];
+            
+            // Check if SSID tag is present (tag number 0)
+            if (len >= 38 && ssidTag[0] == 0) {
+                uint8_t ssidLen = ssidTag[1];
+                // Include hidden SSIDs (ssidLen == 0) and visible SSIDs
+                if (ssidLen <= 32 && (36 + 2 + ssidLen) <= len) {
+                    char ssid[33] = {0};
+                    if (ssidLen > 0) {
+                        memcpy(ssid, &ssidTag[2], ssidLen);
+                        ssid[ssidLen] = '\0';
+                    }
+                    
+                    // Extract BSSID (MAC address of AP) from offset 16
+                    const uint8_t* bssid = &payload[16];
+                    
+                    // Convert BSSID to uint64_t for set storage
+                    uint64_t bssidKey = 0;
+                    for (int i = 0; i < 6; i++) {
+                        bssidKey = (bssidKey << 8) | bssid[i];
+                    }
+                    
+                    // Track unique BSSID for this channel (includes hidden SSIDs)
+                    if (channel >= 1 && channel <= 11 && rssi >= -70) {
+                        channelBSSIDs[channel].insert(bssidKey);
+                    }
+                }
+            }
+        }
+    }
+    
     // Define a multiplier based on RSSI: stronger signals get higher multiplier
     // Example: RSSI >= -60: x4, -70 to -61: x3, -80 to -71: x2, else x1
     int multiplier = 1;
@@ -564,8 +608,9 @@ void ESPNowCommunication::rxPromiscuousPacket(void* buf, wifi_promiscuous_pkt_ty
 
 void ESPNowCommunication::scanningLoop() {
     if (!enteredPromiscuousMode) {
-        //Reset channel byte counts
+        //Reset channel byte counts and BSSID tracking
         memset(channelBytesSeen, 0, sizeof(channelBytesSeen));
+        for (int i = 0; i < 12; i++) channelBSSIDs[i].clear();
 
         if (pairing) exitPairingMode();
 
@@ -591,11 +636,12 @@ void ESPNowCommunication::scanningLoop() {
     if (millis() - lastMetricsPrint >= 1000) {
         lastMetricsPrint = millis();
         uint8_t currentChannel = WiFi.channel();
+        size_t uniqueBSSIDs = channelBSSIDs[currentChannel].size();
         unsigned long elapsedTime = millis() - scanningChannelStartTime;
-        Serial.printf("Scanning Channel %2d: %10u bytes (%lu ms elapsed)\n", currentChannel, channelBytesSeen[currentChannel], elapsedTime);
+        Serial.printf("Scanning Channel %2d: %10u score, %u APs (%lu ms elapsed)\n", currentChannel, channelBytesSeen[currentChannel], uniqueBSSIDs , elapsedTime);
     }
     
-    if (millis() - scanningChannelStartTime >= scansRun >= 1 ? scanningChannelDuration*2 : scanningChannelDuration) {
+    if (millis() - scanningChannelStartTime >= (scansRun >= 1 ? scanningChannelDuration*2 : scanningChannelDuration)) {
         uint8_t currentChannel = WiFi.channel();
         if (currentChannel >= 11) {
             // Finished scanning all channels
@@ -604,7 +650,14 @@ void ESPNowCommunication::scanningLoop() {
             enteredPromiscuousMode = false;
             Serial.println("Exited promiscuous mode, finished environment scanning");
             // Print channel statistics
-            Serial.println("Channel activity summary (bytes seen):");
+            Serial.println("Channel activity summary:");
+
+            //Multiply each channel by the amount of APs observed
+            for (int ch = 1; ch <= 11; ++ch) {
+                size_t uniqueAPs = channelBSSIDs[ch].size();
+                channelBytesSeen[ch] *= (1 + uniqueAPs);
+            }
+
             // Find the channel with the lowest byte count
             uint32_t minBytes = channelBytesSeen[1];
             int bestChannel = 1;
@@ -613,7 +666,8 @@ void ESPNowCommunication::scanningLoop() {
             int bestPrimary = -1;
             uint32_t minPrimaryBytes = UINT32_MAX;
             for (int ch = 1; ch <= 11; ++ch) {
-                Serial.printf("Channel %2d: %10u bytes\n", ch, channelBytesSeen[ch]);
+                size_t uniqueAPs = channelBSSIDs[ch].size();
+                Serial.printf("Channel %2d: %10u score, %u unique APs\n", ch, channelBytesSeen[ch], uniqueAPs);
                 if (channelBytesSeen[ch] < minBytes) {
                     minBytes = channelBytesSeen[ch];
                     bestChannel = ch;
@@ -630,10 +684,10 @@ void ESPNowCommunication::scanningLoop() {
                 }
             }
             if (bestPrimary != -1) {
-                Serial.printf("Best channel to use (primary preferred): %d (activity: %u bytes)\n", bestPrimary, channelBytesSeen[bestPrimary]);
+                Serial.printf("Best channel to use (primary preferred): %d (activity: %u score)\n", bestPrimary, channelBytesSeen[bestPrimary]);
                 Configuration::getInstance().setWifiChannel((uint8_t)bestPrimary);
             } else {
-                Serial.printf("Best channel to use: %d (lowest activity: %u bytes)\n", bestChannel, minBytes);
+                Serial.printf("Best channel to use: %d (lowest activity: %u score)\n", bestChannel, minBytes);
                 Configuration::getInstance().setWifiChannel((uint8_t)bestChannel);
             }
 

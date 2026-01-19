@@ -906,12 +906,13 @@ std::string ESPNowCommunication::espNowErrorToString(esp_err_t error) {
 
 // Adds a ESP-Now peer with the given MAC address
 uint8_t ESPNowCommunication::addPeer(const uint8_t peerMac[6], bool defaultConfig) {
-    Serial.printf("Adding peer " MACSTR "\n", MAC2ARGS(peerMac));
     // Check if peer already exists
     if (esp_now_is_peer_exist(peerMac)) {
         Serial.printf("Peer " MACSTR " already exists.\n", MAC2ARGS(peerMac));
         return ESP_OK; // Peer already exists, return success
     }
+    
+    //Serial.printf("Adding peer " MACSTR "\n", MAC2ARGS(peerMac));
 
     esp_now_peer_info_t peer;
     memset(&peer, 0, sizeof(esp_now_peer_info_t));
@@ -941,7 +942,7 @@ bool ESPNowCommunication::deletePeer(const uint8_t peerMac[6]) {
         return true; // Peer does not exist, return success
     }
 
-    Serial.printf("Deleting peer " MACSTR "\n", MAC2ARGS(peerMac));
+    //Serial.printf("Deleting peer " MACSTR "\n", MAC2ARGS(peerMac));
     auto result = esp_now_del_peer(peerMac);
     if (result != ESP_OK || esp_now_is_peer_exist(peerMac)) Serial.printf("Failed to delete peer " MACSTR ", error: %s\n", MAC2ARGS(peerMac), espNowErrorToString(result).c_str());
 

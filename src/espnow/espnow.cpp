@@ -274,7 +274,7 @@ void ESPNowCommunication::sendUnpairToAllTrackers() {
 
     queueMessage(broadcastAddress, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
     queueMessage(broadcastAddress, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
-    queueMessage(broadcastAddress, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage), false, true);
+    queueMessage(broadcastAddress, reinterpret_cast<const uint8_t *>(&unpairMsg), sizeof(ESPNowUnpairMessage));
 
     // Serial.println("Unpair messages queued to all trackers");
 }

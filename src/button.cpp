@@ -48,6 +48,7 @@ void Button::update() {
         }
 
         invokeLongPressCallbacks();
+        pressCount = 0;
         polling = false;
         attach();
         return;

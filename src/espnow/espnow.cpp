@@ -916,7 +916,7 @@ void ESPNowCommunication::exitEnvironmentScanningMode() {
     }
     begin();
     scanningEnvironment = false;
-    statusManager.setStatus(SlimeVR::Status::SCANNING, true);
+    statusManager.setStatus(SlimeVR::Status::SCANNING, false);
 }
 
 void ESPNowCommunication::UnpairAllTrackers() {

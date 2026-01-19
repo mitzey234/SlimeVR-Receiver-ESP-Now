@@ -34,6 +34,7 @@ void Button::update() {
 
         if (pressCount >= 1) {
             invokeMultiPressCallbacks(pressCount);
+            pressCount = 0;
         }
 
         polling = false;

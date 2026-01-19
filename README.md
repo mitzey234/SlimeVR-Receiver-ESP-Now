@@ -21,13 +21,16 @@ flashed onto them.
 
 The trackers will require pairing the first time you set them up. To achieve
 this, first you need to put the dongle into pairing mode by pressing the button
-on it once while the trackers are in pairing mode. Pairin mode is indicated by a rapidly flashing light on both the dongle and the tracker. If the pairing was successful, the dongle will stop flashing and the tracker should also stop flashing rapdidly and switch to a slower infrequent flashing pattern.
+on it once while the trackers are in pairing mode. Pairing mode is indicated by a rapidly flashing light on both the dongle and the tracker. If the pairing was successful, the tracker will stop flashing rapdidly and switch to a slower infrequent flashing pattern. The dongle only exits pairing mode after 60 seconds of inactivity, or if you press the button on it again. Pairing inactivity is reset when a new tracker is paired.
 
 After pairing, when you turn the tracker on from that point on, it will attempt to
 connect to its saved dongle.
 
-If everything went as expected, the tracker should now appear in the SlimeVR
-server.
+If everything went as expected, the tracker should now appear in the SlimeVR server.
+
+If the dongle LED flashes with longer flashes after being plugged in, it means it is scanning the wireless environment for the best channel to use. This process is necessary for optimal performance, and it only happens the first time the dongle is powered on. Once the scanning is complete, the dongle will save the best channel found and use it for future connections. The LED will stop flashing rapidly once the scanning is complete.
+
+To rescan the environment, press the button on the dongle twice quickly. Note that you cannot enter pairing mode while the dongle is scanning the environment.
 
 If you ever want to pair the tracker to a different dongle your best course of action is to put it into pairing mode with UART serial commands, or by unpairing all trackers WHILE they are connected to the dongle.
 

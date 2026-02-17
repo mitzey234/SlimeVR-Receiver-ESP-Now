@@ -36,12 +36,15 @@ struct __attribute__((packed)) ESPNowPairingAckMessage {
 struct __attribute__((packed)) ESPNowConnectionMessage {
     ESPNowMessageTypes header = ESPNowMessageTypes::HANDSHAKE_REQUEST;
     uint8_t securityBytes[8];
+    uint8_t token[8];
 };
 
 struct __attribute__((packed)) ESPNowConnectionAckMessage {
     ESPNowMessageTypes header = ESPNowMessageTypes::HANDSHAKE_RESPONSE;
     uint8_t channel;
     uint8_t trackerId;
+    uint8_t token[8];
+	uint8_t targetAddr[6];
 };
 
 struct __attribute__((packed)) ESPNowPacketMessage {

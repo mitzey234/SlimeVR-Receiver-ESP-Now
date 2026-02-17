@@ -452,8 +452,12 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
             ESPNowConnectionAckMessage handshakeResponse;
             handshakeResponse.trackerId = tracker->trackerId;
             handshakeResponse.channel = channel;
-            // Serial.printf("Re-sending handshake ack to " MACSTR " for tracker ID %d\n", MAC2ARGS(senderInfo->src_addr), tracker->trackerId);
-            queueMessage(senderInfo->src_addr, reinterpret_cast<const uint8_t *>(&handshakeResponse), sizeof(ESPNowConnectionAckMessage));
+            memcpy(handshakeResponse.token, handshake.token, 8);
+            memcpy(handshakeResponse.targetAddr, senderInfo->src_addr, 6);
+            Serial.printf("Re-sending handshake ack to " MACSTR " for tracker ID %d - token: ", MAC2ARGS(senderInfo->src_addr), tracker->trackerId);
+            for (int i = 0; i < 8; ++i) Serial.printf("%02x", handshakeResponse.token[i]);
+            Serial.println();
+            queueMessage(broadcastAddress, reinterpret_cast<const uint8_t *>(&handshakeResponse), sizeof(ESPNowConnectionAckMessage));
             return;
         }
 
@@ -464,8 +468,10 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         ESPNowConnectionAckMessage handshakeResponse;
         handshakeResponse.trackerId = trackerId;
         handshakeResponse.channel = channel;
+        memcpy(handshakeResponse.token, handshake.token, 8);
+        memcpy(handshakeResponse.targetAddr, senderInfo->src_addr, 6);
         // Serial.printf("Sending handshake ack to " MACSTR " with tracker ID %d\n", MAC2ARGS(senderInfo->src_addr), trackerId);
-        queueMessage(senderInfo->src_addr, reinterpret_cast<const uint8_t *>(&handshakeResponse), sizeof(ESPNowConnectionAckMessage));
+        queueMessage(broadcastAddress, reinterpret_cast<const uint8_t *>(&handshakeResponse), sizeof(ESPNowConnectionAckMessage));
 
         // Step 3: Add tracker to connected list with heartbeat tracking
         Tracker newTracker;

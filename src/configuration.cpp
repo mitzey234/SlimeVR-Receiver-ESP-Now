@@ -67,6 +67,26 @@ bool Configuration::wifiChannelFileExists() {
     return LittleFS.exists(Configuration::wifiChannelPath);
 }
 
+size_t Configuration::getSavedTrackerCount() {
+    if (!LittleFS.exists(trackerIdsPath)) return 0;
+
+    size_t count = 0;
+    auto file = LittleFS.open(trackerIdsPath, "r");
+    uint8_t mac[6];
+    uint8_t trackerId;
+    while (file.available()) {
+        if (file.read(mac, 6) == 6 && file.read(&trackerId, 1) == 1) {
+            count++;
+        }
+    }
+    file.close();
+    return count;
+}
+
+bool Configuration::isPairedTrackerCapacityReached() {
+    return getSavedTrackerCount() >= maxPairedTrackers;
+}
+
 // Get all paired tracker MACs
 std::vector<std::array<uint8_t, 6>> Configuration::getAllPairedTrackerMacs() {
     std::vector<std::array<uint8_t, 6>> macs;
@@ -264,54 +284,65 @@ void Configuration::clearAllPairedTrackers() {
     }
 }
 
-uint8_t Configuration::getTrackerIdForMac(const uint8_t mac[6]) {
+bool Configuration::getTrackerIdForMac(const uint8_t mac[6], uint8_t &trackerId) {
     if (!LittleFS.exists(trackerIdsPath)) {
         // No tracker IDs file exists, allocate new ID
-        return allocateTrackerIdForMac(mac);
+        return allocateTrackerIdForMac(mac, trackerId);
     }
     
     // Search for existing tracker ID
     auto file = LittleFS.open(trackerIdsPath, "r");
     uint8_t storedMac[6];
-    uint8_t trackerId;
+    uint8_t storedTrackerId;
     
     while (file.available()) {
-        if (file.read(storedMac, 6) == 6 && file.read(&trackerId, 1) == 1) {
+        if (file.read(storedMac, 6) == 6 && file.read(&storedTrackerId, 1) == 1) {
             if (memcmp(storedMac, mac, 6) == 0) {
                 file.close();
                 Serial.printf("Found existing tracker ID %d for MAC %02x:%02x:%02x:%02x:%02x:%02x\n",
-                             trackerId, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-                return trackerId;
+                             storedTrackerId, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+                trackerId = storedTrackerId;
+                return true;
             }
         }
     }
     file.close();
     
     // MAC not found, allocate new ID
-    return allocateTrackerIdForMac(mac);
+    return allocateTrackerIdForMac(mac, trackerId);
 }
 
-uint8_t Configuration::allocateTrackerIdForMac(const uint8_t mac[6]) {
+bool Configuration::allocateTrackerIdForMac(const uint8_t mac[6], uint8_t &trackerId) {
     // Read all existing tracker IDs to find first available
-    std::vector<uint8_t> usedIds;
+    bool usedIds[256] = {false};
     
     if (LittleFS.exists(trackerIdsPath)) {
         auto file = LittleFS.open(trackerIdsPath, "r");
         uint8_t storedMac[6];
-        uint8_t trackerId;
+        uint8_t storedTrackerId;
         
         while (file.available()) {
-            if (file.read(storedMac, 6) == 6 && file.read(&trackerId, 1) == 1) {
-                usedIds.push_back(trackerId);
+            if (file.read(storedMac, 6) == 6 && file.read(&storedTrackerId, 1) == 1) {
+                usedIds[storedTrackerId] = true;
             }
         }
         file.close();
     }
     
     // Find first available ID (starting from STARTING_TRACKER_ID)
-    uint8_t newId = STARTING_TRACKER_ID;
-    while (std::find(usedIds.begin(), usedIds.end(), newId) != usedIds.end()) {
-        newId++;
+    bool found = false;
+    uint8_t newId = 0;
+    for (uint16_t candidate = STARTING_TRACKER_ID; candidate < 256; candidate++) {
+        if (!usedIds[candidate]) {
+            newId = static_cast<uint8_t>(candidate);
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        Serial.println("[Config] Cannot allocate tracker ID: capacity reached (256 trackers). Unpair trackers first.");
+        return false;
     }
     
     // Store the new MAC -> ID mapping
@@ -319,11 +350,13 @@ uint8_t Configuration::allocateTrackerIdForMac(const uint8_t mac[6]) {
     file.write(mac, 6);
     file.write(&newId, 1);
     file.close();
+
+    trackerId = newId;
     
     Serial.printf("Allocated new tracker ID %d for MAC %02x:%02x:%02x:%02x:%02x:%02x\n",
                  newId, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     
-    return newId;
+    return true;
 }
 
 Configuration Configuration::instance;

@@ -34,5 +34,5 @@ elif branch:
 else:
     version = f"git-{revision}" if revision else "git-unknown"
 
-env.Append(BUILD_FLAGS=[f"-DFIRMWARE_VERSION='\\\"{version}\\\"'"])
+env.Append(BUILD_FLAGS=[f"-DFIRMWARE_VERSION='\"{version}\"'"])
 print(f"[firmware_version] FIRMWARE_VERSION={version}")

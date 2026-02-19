@@ -5,18 +5,21 @@
 #include "error_codes.h"
 #include "espnow/espnow.h"
 #include "packetHandling.h"
-#include "logging/Logger.h"
 #include "GlobalVars.h"
 #include "Serial.h"
+#include "./serialCom/Ident.h"
 
 #include "USB.h"
+
+#ifndef FIRMWARE_VERSION
+#define FIRMWARE_VERSION "unknown"
+#endif
 
 HIDDevice hidDevice;
 Button &button = Button::getInstance();
 ESPNowCommunication &espnow = ESPNowCommunication::getInstance();
 SlimeVR::Status::StatusManager statusManager;
 SlimeVR::LEDManager ledManager;
-SlimeVR::Logging::Logger logger("Main");
 ConsoleCommandHandler consoleCommandHandler;
 
 void fail(ErrorCodes errorCode) {
@@ -26,7 +29,7 @@ void fail(ErrorCodes errorCode) {
 
 void setup() { 
     hidDevice.begin();
-    Serial.println("Starting up " USB_PRODUCT "...");
+    Serial.printf("Starting up " USB_PRODUCT  "  - " FIRMWARE_VERSION "\n");
 
     statusManager.setStatus(SlimeVR::Status::LOADING, true);
     ledManager.setup();

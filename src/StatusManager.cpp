@@ -7,7 +7,7 @@ void StatusManager::setStatus(Status status, bool value) {
 			return;
 		}
 
-		m_Logger.trace("Added status %s", statusToString(status));
+		// Serial.printf("Added status %s\n", statusToString(status));
 
 		m_Status |= status;
 	} else {
@@ -15,7 +15,7 @@ void StatusManager::setStatus(Status status, bool value) {
 			return;
 		}
 
-		m_Logger.trace("Removed status %s", statusToString(status));
+		// Serial.printf("Removed status %s\n", statusToString(status));
 
 		m_Status &= ~status;
 	}

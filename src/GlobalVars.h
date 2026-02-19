@@ -25,6 +25,8 @@
 #include <Arduino.h>
 #include "LEDManager.h"
 #include "StatusManager.h"
+#include "espnow/espnow.h"
 
 extern SlimeVR::LEDManager ledManager;
 extern SlimeVR::Status::StatusManager statusManager;
+extern ESPNowCommunication &espnow;

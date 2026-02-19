@@ -8,6 +8,7 @@
 #include <string>
 #include "../GlobalVars.h"
 #include <set>
+#include "../serialCom/Ident.h"
 
 // Ensure StatusManager type is defined before extern declaration
 // Use the global StatusManager instance defined in main.cpp
@@ -16,6 +17,8 @@ extern SlimeVR::Status::StatusManager statusManager;
 
 #define MACSTR "%02x:%02x:%02x:%02x:%02x:%02x"
 #define MAC2ARGS(mac) mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+
+static constexpr const char *kPairingCapacityMessage = "Pairing Capacity reached (256 trackers). Unpair trackers before pairing new ones.";
 
 
 // Static member definition
@@ -75,6 +78,12 @@ uint8_t* ESPNowCommunication::getTrackerIdByIndex(size_t index) {
     return &connectedTrackers[index].trackerId;
 }
 
+// Gets the tracker structure by its index
+ESPNowCommunication::Tracker* ESPNowCommunication::getTrackerByIndex(size_t index) {
+    if (index >= connectedTrackers.size()) return nullptr;
+    return &connectedTrackers[index];
+}
+
 // Gets the tracker structure for a given MAC address
 ESPNowCommunication::Tracker *ESPNowCommunication::getTracker(const uint8_t peerMac[6]) {
     // Fast MAC comparison using integer comparisons instead of memcmp
@@ -102,15 +111,20 @@ bool ESPNowCommunication::isTrackerIdConnected(uint8_t trackerId) const {
 }
 
 // Enters pairing mode
-void ESPNowCommunication::enterPairingMode() {
+bool ESPNowCommunication::enterPairingMode() {
     if (scanningEnvironment) {
         Serial.println("Cannot enter pairing mode while scanning environment");
-        return;
+        return false;
+    }
+    if (Configuration::getInstance().isPairedTrackerCapacityReached()) {
+        Serial.println(kPairingCapacityMessage);
+        return false;
     }
     Serial.println("Entering pairing mode");
     pairing = true;
     pairingStartTime = millis();
     statusManager.setStatus(SlimeVR::Status::PAIRING_MODE, true);
+    return true;
 }
 
 // Exits pairing mode
@@ -407,9 +421,18 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         // Step 1: Check if tracker is already paired
         if (!Configuration::getInstance().isPairedTracker(senderInfo->src_addr)) {
             if (!pairing) return; // Ignore pairing requests if not in pairing mode
+            if (Configuration::getInstance().isPairedTrackerCapacityReached()) {
+                Serial.println(kPairingCapacityMessage);
+                return;
+            }
             Configuration::getInstance().addPairedTracker(senderInfo->src_addr);
             // Allocate persistent tracker ID for this MAC address
-            uint8_t trackerId = Configuration::getInstance().getTrackerIdForMac(senderInfo->src_addr);
+            uint8_t trackerId;
+            if (!Configuration::getInstance().getTrackerIdForMac(senderInfo->src_addr, trackerId)) {
+                Configuration::getInstance().removePairedTracker(senderInfo->src_addr);
+                Serial.println(kPairingCapacityMessage);
+                return;
+            }
             Serial.printf("Paired a new tracker at mac address " MACSTR " with ID %d!\n", MAC2ARGS(senderInfo->src_addr), trackerId);
         } else {
             Serial.printf("Tracker at mac address " MACSTR " is already paired!\n", MAC2ARGS(senderInfo->src_addr));
@@ -462,7 +485,11 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         }
 
         // Step 1: Get persistent tracker ID for this MAC address
-        uint8_t trackerId = Configuration::getInstance().getTrackerIdForMac(senderInfo->src_addr);
+        uint8_t trackerId;
+        if (!Configuration::getInstance().getTrackerIdForMac(senderInfo->src_addr, trackerId)) {
+            Serial.println("[ESPNOW] Failed to resolve tracker ID. Tracker capacity may be reached.");
+            return;
+        }
 
         // Step 2: Send handshake response with tracker ID and channel
         ESPNowConnectionAckMessage handshakeResponse;

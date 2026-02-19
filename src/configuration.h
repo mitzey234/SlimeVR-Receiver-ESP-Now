@@ -1,6 +1,7 @@
 #pragma once
 
 #include <LittleFS.h>
+#include <cstddef>
 #include <cstdint>
 #include "Serial.h"
 
@@ -16,9 +17,11 @@ public:
     // Helper: get all paired tracker MACs and IDs as vectors
     std::vector<std::array<uint8_t, 6>> getAllPairedTrackerMacs();
     std::vector<uint8_t> getAllPairedTrackerIds();
+    size_t getSavedTrackerCount();
+    bool isPairedTrackerCapacityReached();
+    static constexpr size_t maxPairedTrackers = 256;
     static Configuration &getInstance();
     void setup();
-    uint8_t getSavedTrackerCount();
     void getSecurityCode(uint8_t securityCode[8]);
     void resetSecurityCode();
     
@@ -32,8 +35,8 @@ public:
     bool isTrackerIdInUse(uint8_t trackerId);
     
     // Tracker ID management (persistent)
-    uint8_t getTrackerIdForMac(const uint8_t mac[6]);  // Returns existing or allocates new ID
-    uint8_t allocateTrackerIdForMac(const uint8_t mac[6]);  // Internal: finds first available ID
+    bool getTrackerIdForMac(const uint8_t mac[6], uint8_t &trackerId);  // Returns existing or allocates new ID
+    bool allocateTrackerIdForMac(const uint8_t mac[6], uint8_t &trackerId);  // Internal: finds first available ID
     bool wifiChannelFileExists();
 
 private:

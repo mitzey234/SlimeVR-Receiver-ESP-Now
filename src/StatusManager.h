@@ -3,7 +3,6 @@
 
 #include "Serial.h"
 #include "Status.h"
-#include "logging/Logger.h"
 
 namespace SlimeVR::Status {
 class StatusManager {
@@ -14,8 +13,6 @@ public:
 
 private:
 	uint32_t m_Status;
-
-	Logging::Logger m_Logger = Logging::Logger("StatusManager");
 };
 }  // namespace SlimeVR::Status
 

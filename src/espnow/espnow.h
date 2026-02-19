@@ -12,6 +12,16 @@
 
 class ESPNowCommunication {
     public:
+        // Heartbeat tracking structure
+        struct Tracker {
+            std::array<uint8_t, 6> mac;
+            uint8_t trackerId;
+            bool waitingForResponse = false;
+            uint8_t missedPings = 0;
+            uint8_t latency = 0;
+            int8_t rssi = 0;  // Signal strength in dBm
+        };
+        
         static constexpr size_t packetSizeBytes = 240;
 
         static unsigned int channel;
@@ -22,7 +32,7 @@ class ESPNowCommunication {
 
         ErrorCodes begin();
 
-        void enterPairingMode();
+        bool enterPairingMode();
         void exitPairingMode();
         bool isInPairingMode() const { return pairing; }
         
@@ -41,6 +51,7 @@ class ESPNowCommunication {
         size_t getConnectedTrackerCount() const;
         bool getTrackerMacByIndex(size_t index, uint8_t mac[6]) const;
         uint8_t* getTrackerIdByIndex(size_t index);
+        Tracker* getTrackerByIndex(size_t index);
         uint8_t securityCode[8];
 
         bool isTrackerConnected(const uint8_t peerMac[6]);
@@ -65,16 +76,6 @@ class ESPNowCommunication {
 
         static void onReceive(const esp_now_recv_info_t *senderInfo, const uint8_t *data, int dataLen);
         void __attribute__((hot)) __attribute__((flatten)) handleMessage(const esp_now_recv_info_t *senderInfo, const uint8_t *data, int dataLen);
-
-        // Heartbeat tracking structure
-        struct Tracker {
-            std::array<uint8_t, 6> mac;
-            uint8_t trackerId;
-            bool waitingForResponse = false;
-            uint8_t missedPings = 0;
-            uint8_t latency = 0;
-            int8_t rssi = 0;  // Signal strength in dBm
-        };
 
         uint8_t addPeer(const uint8_t peerMac[6]);
         uint8_t addPeer(const uint8_t peerMac[6], bool defaultConfig);

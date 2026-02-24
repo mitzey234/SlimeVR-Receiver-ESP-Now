@@ -11,6 +11,7 @@
 #include "UnknownCommand.h"
 #include "UnpairAllCommand.h"
 #include "UnpairCommand.h"
+#include "SCInitCommand.h"
 
 void processConsoleCommand(const String &command) {
     if (handleFactoryResetCommand(command)) return;
@@ -23,6 +24,7 @@ void processConsoleCommand(const String &command) {
     if (handleGetChannelCommand(command)) return;
     if (handleScanEnvCommand(command)) return;
     if (handleUnpairAllCommand(command)) return;
+    if (handleSCInitCommand(command)) return;
 
     handleUnknownCommand();
 }

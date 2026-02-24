@@ -1,10 +1,18 @@
 #include "SetChannelCommand.h"
 
 #include "../configuration.h"
+#include "../espnow/espnow.h"
 
 bool handleSetChannelCommand(const String &command) {
     if (!command.startsWith("setchannel ")) {
         return false;
+    }
+
+    bool scanning = ESPNowCommunication::getInstance().isScanningEnvironment();
+    if (scanning) {
+        // Don't allow changing channel while scanning environment, as it can cause issues with the scanning process
+        Serial.println("[CMD] Cannot change WiFi channel while environment scanning is active. Please stop scanning first.");
+        return true; // Return true since we recognized the command, even though we didn't execute it
     }
 
     String chStr = command.substring(10);

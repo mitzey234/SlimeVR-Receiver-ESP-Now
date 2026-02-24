@@ -8,7 +8,7 @@
 #include <string>
 #include "../GlobalVars.h"
 #include <set>
-#include "../serialCom/Ident.h"
+#include "../serialCom/SerialCom.h"
 
 // Ensure StatusManager type is defined before extern declaration
 // Use the global StatusManager instance defined in main.cpp
@@ -124,6 +124,10 @@ bool ESPNowCommunication::enterPairingMode() {
     pairing = true;
     pairingStartTime = millis();
     statusManager.setStatus(SlimeVR::Status::PAIRING_MODE, true);
+
+    if (SlimeVR::SerialCom::comEnabled()) {
+        // TODO: Tell our dongle software
+    }
     return true;
 }
 
@@ -132,6 +136,10 @@ void ESPNowCommunication::exitPairingMode() {
     Serial.println("Exiting pairing mode");
     pairing = false;
     statusManager.setStatus(SlimeVR::Status::PAIRING_MODE, false);
+
+    if (SlimeVR::SerialCom::comEnabled()) {
+        // TODO: Tell our dongle software
+    }
 }
 
 // Disconnect a single tracker by MAC
@@ -662,6 +670,10 @@ void ESPNowCommunication::scanningLoop() {
         });
         enteredPromiscuousMode = true;
         Serial.println("Entered promiscuous mode for environment scanning");
+
+        if (SlimeVR::SerialCom::comEnabled()) {
+            // TODO: Tell our dongle software
+        }
     }
 
     // Print current channel metrics every second
@@ -898,8 +910,10 @@ void ESPNowCommunication::update() {
         const uint8_t avgLatency = trackerCount > 0 ? totalLatency / trackerCount : 0;
         const int8_t avgRssi = trackerCount > 0 ? static_cast<int8_t>(totalRssi / static_cast<long>(trackerCount)) : 0;
 
+        float temp_celsius = temperatureRead();
+
         // Use shorter format to reduce blocking time
-        Serial.printf("T:%d|L:%d/%dms|RSSI:%d/%ddBm|PPS:%d|BPS:%d|Q:%d\n", trackerCount, avgLatency, highestLatency, avgRssi, maxRssi, pps, bytesPerSecond, queueSize());
+        Serial.printf("T:%d|L:%d/%dms|RSSI:%d/%ddBm|PPS:%d|BPS:%d|Q:%d|Temp:%.2fC\n", trackerCount, avgLatency, highestLatency, avgRssi, maxRssi, pps, bytesPerSecond, queueSize(), temp_celsius);
     }
 
     // PRIORITY 4: Process send queue - rate limiting to prevent ESP_ERR_ESPNOW_NO_MEM
@@ -1006,10 +1020,16 @@ void ESPNowCommunication::exitEnvironmentScanningMode() {
     begin();
     scanningEnvironment = false;
     statusManager.setStatus(SlimeVR::Status::SCANNING, false);
+    if (SlimeVR::SerialCom::comEnabled()) {
+        // TODO: Tell our dongle software
+    }
 }
 
 void ESPNowCommunication::UnpairAllTrackers() {
     Serial.println("Trackers reset");
+    if (SlimeVR::SerialCom::comEnabled()) {
+        // TODO: Tell our dongle software that all trackers are unpaired
+    }
     Configuration::getInstance().clearAllPairedTrackers();
     sendUnpairToAllTrackers();
     disconnectAllTrackers();

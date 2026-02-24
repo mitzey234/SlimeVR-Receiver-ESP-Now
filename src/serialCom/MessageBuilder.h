@@ -20,6 +20,7 @@ namespace SlimeVR
             bool writeUInt16(uint16_t value);
             bool writeMacAddress(const uint8_t mac[6]);
             bool writeTracker(ESPNowCommunication::Tracker tracker);
+            bool writePairedTracker(const uint8_t mac[6], uint8_t trackerId);
             bool writeInt8(int8_t value);
             bool writeInt16(int16_t value);
             bool writeBool(bool value);

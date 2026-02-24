@@ -58,7 +58,9 @@ class ESPNowCommunication {
 
         void startOtaUpdate(const uint8_t auth[16], long port, const uint8_t ip[4], const char ssid[33], const char password[65]);
 
-        void enterEnvironmentScanningMode() { scanningEnvironment = true; }
+        void enterEnvironmentScanningMode() { 
+            scanningEnvironment = true;
+        }
         void exitEnvironmentScanningMode();
         bool isScanningEnvironment() const { return scanningEnvironment; }
         void UnpairAllTrackers();

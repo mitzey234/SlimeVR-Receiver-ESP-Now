@@ -156,6 +156,16 @@ namespace SlimeVR
         return true;
     }
 
+    bool MessageBuilder::writePairedTracker(const uint8_t mac[6], uint8_t trackerId) {
+        if (!writeMacAddress(mac)) {
+            return false;
+        }
+        if (!writeUInt8(trackerId)) {
+            return false;
+        }
+        return true;
+    }
+
     bool MessageBuilder::writeInt8(int8_t value)
     {
         return writeBytes(reinterpret_cast<const uint8_t*>(&value), sizeof(int8_t));
@@ -177,10 +187,7 @@ namespace SlimeVR
 
     void MessageBuilder::print()
     {
-        for (uint16_t i = 0; i < head; i++)
-        {
-            Serial.printf("%c", buffer[i]);
-        }
+        for (uint16_t i = 0; i < head; i++) Serial.printf("%c", buffer[i]);
         Serial.println();
     }
 }

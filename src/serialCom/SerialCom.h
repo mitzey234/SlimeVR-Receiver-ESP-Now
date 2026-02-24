@@ -14,7 +14,10 @@ enum class SerialComMessageTypes : uint8_t
         ENVIRONMENT_SCAN_RESULT,
         PAIRED_TRACKERS_LIST,
         TRACKER_PAIRED,
-        TRACKER_UNPAIRED
+        TRACKER_UNPAIRED,
+        ALL_TRACKERS_UNPAIRED,
+        DATA_RATE_UPDATE,
+        UPDATE_CHANNEL
 };
 
 namespace SlimeVR
@@ -22,14 +25,15 @@ namespace SlimeVR
   class SerialCom
   {
     public:
+        static SerialCom Singleton;
         static SerialCom &getInstance() { return Singleton; }
     
         static std::string getPrefix () { return "[SC]"; }
         static bool comEnabled() { return Singleton.enabled; }
+
+        bool enabled = false;
     
     private:
-        static SerialCom Singleton;
         SerialCom() = default;
-        bool enabled = false;
   };
 }

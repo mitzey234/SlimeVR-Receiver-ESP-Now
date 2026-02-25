@@ -37,12 +37,12 @@ void ESPNowCommunication::onTrackerPaired(std::function<void()> callback) {
 }
 
 // Adds a callback method for when a tracker is connected
-void ESPNowCommunication::onTrackerConnected(std::function<void(const uint8_t *)> callback) {
+void ESPNowCommunication::onTrackerConnected(std::function<void(Tracker)> callback) {
     trackerConnectedCallbacks.push_back(std::move(callback));
 }
 
 // Adds a callback method for when a tracker is disconnected
-void ESPNowCommunication::onTrackerDisconnected(std::function<void(uint8_t)> callback) {
+void ESPNowCommunication::onTrackerDisconnected(std::function<void(Tracker)> callback) {
     trackerDisconnectedCallbacks.push_back(std::move(callback));
 }
 
@@ -52,13 +52,13 @@ void ESPNowCommunication::invokeTrackerPairedEvent() {
 }
 
 // Invokes all registered tracker connected event callbacks
-void ESPNowCommunication::invokeTrackerConnectedEvent(const uint8_t *trackerMacAddress) {
-    for (auto &callback : trackerConnectedCallbacks) callback(trackerMacAddress);
+void ESPNowCommunication::invokeTrackerConnectedEvent(ESPNowCommunication::Tracker tracker) {
+    for (auto &callback : trackerConnectedCallbacks) callback(tracker);
 }
 
 // Invokes all registered tracker disconnected event callbacks
-void ESPNowCommunication::invokeTrackerDisconnectedEvent(uint8_t trackerId) {
-    for (auto &callback : trackerDisconnectedCallbacks) callback(trackerId);
+void ESPNowCommunication::invokeTrackerDisconnectedEvent(ESPNowCommunication::Tracker tracker) {
+    for (auto &callback : trackerDisconnectedCallbacks) callback(tracker);
 }
 
 // Gets the number of currently connected trackers
@@ -148,9 +148,9 @@ bool ESPNowCommunication::disconnectSingleTracker(const uint8_t mac[6]) {
         if (memcmp(it->mac.data(), mac, 6) == 0) {
             uint8_t trackerId = it->trackerId;
             deletePeer(mac);
-            connectedTrackers.erase(it);
             Serial.printf("Disconnected tracker %02x:%02x:%02x:%02x:%02x:%02x (ID: %d)\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], trackerId);
-            invokeTrackerDisconnectedEvent(trackerId);
+            invokeTrackerDisconnectedEvent(*it);
+            connectedTrackers.erase(it);
             sendRateUpdateNextTick = true;
             return true;
         }
@@ -161,8 +161,7 @@ bool ESPNowCommunication::disconnectSingleTracker(const uint8_t mac[6]) {
 // Disconnect all trackers
 void ESPNowCommunication::disconnectAllTrackers() {
     for (const auto &tracker : connectedTrackers) {
-        deletePeer(tracker.mac.data());
-        invokeTrackerDisconnectedEvent(tracker.trackerId);
+        disconnectSingleTracker(tracker.mac.data());
     }
 
     connectedTrackers.clear();
@@ -522,7 +521,7 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         sendRateUpdateNextTick = true;
 
         // Step 5: Invoke connected event (also sends rate updates to all other trackers)
-        invokeTrackerConnectedEvent(senderInfo->src_addr);
+        invokeTrackerConnectedEvent(newTracker);
         return;
     }
     case ESPNowMessageTypes::HEARTBEAT_ECHO: {
@@ -912,8 +911,12 @@ void ESPNowCommunication::update() {
 
         float temp_celsius = temperatureRead();
 
+        if (SlimeVR::SerialCom::comEnabled()) {
+            SlimeVR::SerialComMessages::TrackerUpdate::print(bytesPerSecond, pps);
+        }
+
         // Use shorter format to reduce blocking time
-        Serial.printf("T:%d|L:%d/%dms|RSSI:%d/%ddBm|PPS:%d|BPS:%d|Q:%d|Temp:%.2fC\n", trackerCount, avgLatency, highestLatency, avgRssi, maxRssi, pps, bytesPerSecond, queueSize(), temp_celsius);
+        Serial.printf("T:%d|L:%d/%dms|RSSI:%d/%ddBm|PPS:%d|BPS:%d|Temp:%.1fC\n", trackerCount, avgLatency, highestLatency, avgRssi, maxRssi, pps, bytesPerSecond, temp_celsius);
     }
 
     // PRIORITY 4: Process send queue - rate limiting to prevent ESP_ERR_ESPNOW_NO_MEM

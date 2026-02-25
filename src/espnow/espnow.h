@@ -45,8 +45,8 @@ class ESPNowCommunication {
         void update();
 
         void onTrackerPaired(std::function<void()> callback);
-        void onTrackerConnected(std::function<void(const uint8_t *)> callback);
-        void onTrackerDisconnected(std::function<void(uint8_t)> callback);  // Passes tracker ID
+        void onTrackerConnected(std::function<void(Tracker)> callback);
+        void onTrackerDisconnected(std::function<void(Tracker)> callback);  // Passes tracker structure
         
         size_t getConnectedTrackerCount() const;
         bool getTrackerMacByIndex(size_t index, uint8_t mac[6]) const;
@@ -65,6 +65,8 @@ class ESPNowCommunication {
         bool isScanningEnvironment() const { return scanningEnvironment; }
         void UnpairAllTrackers();
 
+        Tracker* getTracker(const uint8_t peerMac[6]);
+
     private:
         static ESPNowCommunication instance;
         ESPNowCommunication() = default;
@@ -72,8 +74,8 @@ class ESPNowCommunication {
         esp_now_rate_config_t rate_config;
 
         void invokeTrackerPairedEvent();
-        void invokeTrackerConnectedEvent(const uint8_t *trackerMacAddress);
-        void invokeTrackerDisconnectedEvent(uint8_t trackerId);
+        void invokeTrackerConnectedEvent(Tracker tracker);
+        void invokeTrackerDisconnectedEvent(Tracker tracker);
         void sendRateUpdateToAllTrackers();
 
         static void onReceive(const esp_now_recv_info_t *senderInfo, const uint8_t *data, int dataLen);
@@ -82,7 +84,6 @@ class ESPNowCommunication {
         uint8_t addPeer(const uint8_t peerMac[6]);
         uint8_t addPeer(const uint8_t peerMac[6], bool defaultConfig);
         bool deletePeer(const uint8_t peerMac[6]);
-        Tracker* getTracker(const uint8_t peerMac[6]);
 
         bool pairing = false;
 
@@ -101,8 +102,8 @@ class ESPNowCommunication {
         uint16_t expectedSequenceNumber = 0;
 
         std::vector<std::function<void()>> trackerPairedCallbacks;
-        std::vector<std::function<void(const uint8_t *)>> trackerConnectedCallbacks;
-        std::vector<std::function<void(uint8_t)>> trackerDisconnectedCallbacks;
+        std::vector<std::function<void(Tracker)>> trackerConnectedCallbacks;
+        std::vector<std::function<void(Tracker)>> trackerDisconnectedCallbacks;
 
         static constexpr uint8_t broadcastAddress[6]{0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
         static constexpr uint8_t espnowWifiChannel = 6;

@@ -17,7 +17,8 @@ enum class SerialComMessageTypes : uint8_t
         TRACKER_UNPAIRED,
         ALL_TRACKERS_UNPAIRED,
         DATA_RATE_UPDATE,
-        UPDATE_CHANNEL
+        UPDATE_CHANNEL,
+        TRACKER_UPDATE
 };
 
 namespace SlimeVR
@@ -37,3 +38,8 @@ namespace SlimeVR
         SerialCom() = default;
   };
 }
+
+#include "Ident.h"
+#include "TrackerConnected.h"
+#include "TrackerDisconnected.h"
+#include "TrackerUpdate.h"

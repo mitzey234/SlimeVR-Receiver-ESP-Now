@@ -9,7 +9,6 @@
 #include "Serial.h"
 #include "./serialCom/SerialCom.h"
 
-
 #include "USB.h"
 
 #ifndef FIRMWARE_VERSION
@@ -85,24 +84,24 @@ void setup() {
         }
     });
 
-    espnow.onTrackerConnected([&](const uint8_t *trackerMacAddress) {
+    espnow.onTrackerConnected([&](ESPNowCommunication::Tracker tracker) {
         uint8_t packet[16];
         packet[0] = 0xff;
-        memcpy(&packet[2], trackerMacAddress, sizeof(uint8_t) * 6);
+        memcpy(&packet[2], tracker.mac.data(), sizeof(uint8_t) * 6);
         memset(&packet[8], 0, sizeof(uint8_t) * 8);
         PacketHandling::getInstance().insert(packet, 16);
 
         if (SlimeVR::SerialCom::comEnabled()) {
-            // TODO: Tell our dongle software
+            SlimeVR::SerialComMessages::TrackerConnected::print(tracker);
         }
     });
 
-    espnow.onTrackerDisconnected([&](uint8_t trackerId) {
-        //Serial.printf("Tracker %d disconnected, sending status packet\n", trackerId);
-        PacketHandling::getInstance().sendDisconnectionStatus(trackerId);
+    espnow.onTrackerDisconnected([&](ESPNowCommunication::Tracker tracker) {
+        //Serial.printf("Tracker %d disconnected, sending status packet\n", tracker.trackerId);
+        PacketHandling::getInstance().sendDisconnectionStatus(tracker.trackerId);
 
         if (SlimeVR::SerialCom::comEnabled()) {
-            // TODO: Tell our dongle software
+            SlimeVR::SerialComMessages::TrackerDisconnected::print(tracker);
         }
     });
 

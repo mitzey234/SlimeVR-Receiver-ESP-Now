@@ -1,3 +1,5 @@
+#pragma once
+
 #include "MessageBuilder.h"
 #include "./SerialCom.h"
 #include "../GlobalVars.h"

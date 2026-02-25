@@ -2,6 +2,8 @@
 #include <string>
 #include "../espnow/espnow.h"
 
+#pragma once
+
 namespace SlimeVR
 {
     class MessageBuilder

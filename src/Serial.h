@@ -1,4 +1,6 @@
 #include <Arduino.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 #undef Serial  // Remove the core's Serial definition
 
@@ -11,9 +13,32 @@ class HybridSerial : public Stream {
 private:
     HardwareSerial* uart;
     USBCDC* usb;
+    SemaphoreHandle_t writeMutex;
+    StaticSemaphore_t mutexBuffer;
+    
+    // Internal unlocked write helpers
+    size_t writeUnlocked(uint8_t c) {
+        size_t n = 0;
+        n += uart->write(c);
+        if (usb && usb->availableForWrite() > 0) {
+            n += usb->write(c);
+        }
+        return n;
+    }
+    
+    size_t writeUnlocked(const uint8_t *buffer, size_t size) {
+        size_t n = 0;
+        n += uart->write(buffer, size);
+        if (usb && usb->availableForWrite() > 0) {
+            n += usb->write(buffer, size);
+        }
+        return n;
+    }
     
 public:
-    HybridSerial() : uart(&Serial0), usb(&USBSerial) {}
+    HybridSerial() : uart(&Serial0), usb(&USBSerial) {
+        writeMutex = xSemaphoreCreateMutexStatic(&mutexBuffer);
+    }
     
     void begin(unsigned long baud = 115200) {
         uart->begin(baud);
@@ -24,25 +49,70 @@ public:
         usb->begin();
     }
     
-    // Write to both USB and UART
     size_t write(uint8_t c) override {
-        size_t n = 0;
-        n += uart->write(c);
-        // Only write to USB if connected
-        if (usb && usb->availableForWrite() > 0) {
-            n += usb->write(c);
+        if (writeMutex && xSemaphoreTake(writeMutex, portMAX_DELAY) == pdTRUE) {
+            size_t n = writeUnlocked(c);
+            xSemaphoreGive(writeMutex);
+            return n;
         }
-        return n;
+        return 0;
     }
 
     size_t write(const uint8_t *buffer, size_t size) override {
-        size_t n = 0;
-        n += uart->write(buffer, size);
-        // Only write to USB if connected
-        if (usb && usb->availableForWrite() > 0) {
-            n += usb->write(buffer, size);
+        if (writeMutex && xSemaphoreTake(writeMutex, portMAX_DELAY) == pdTRUE) {
+            size_t n = writeUnlocked(buffer, size);
+            xSemaphoreGive(writeMutex);
+            return n;
         }
+        return 0;
+    }
+    
+    size_t printf(const char *format, ...) {
+        if (!writeMutex || xSemaphoreTake(writeMutex, portMAX_DELAY) != pdTRUE) {
+            return 0;
+        }
+        
+        va_list args;
+        va_start(args, format);
+        char buffer[256];
+        int len = vsnprintf(buffer, sizeof(buffer), format, args);
+        va_end(args);
+        
+        size_t n = 0;
+        if (len > 0) {
+            n = writeUnlocked((const uint8_t*)buffer, len);
+        }
+        
+        xSemaphoreGive(writeMutex);
         return n;
+    }
+
+    size_t writeLine(const uint8_t *buffer, size_t size) {
+        if (writeMutex && xSemaphoreTake(writeMutex, portMAX_DELAY) == pdTRUE) {
+            size_t n = writeUnlocked(buffer, size);
+            n += writeUnlocked((const uint8_t*)"\r\n", 2);
+            uart->flush();
+            if (usb) usb->flush();
+            xSemaphoreGive(writeMutex);
+            return n;
+        }
+        return 0;
+    }
+
+    size_t writeLine(const char* s) {
+        return writeLine((const uint8_t*)s, strlen(s));
+    }
+    
+    size_t println() {
+        return writeLine((const uint8_t*)"", 0);
+    }
+    
+    size_t println(const char* s) {
+        return writeLine(s);
+    }
+    
+    size_t println(const String& s) {
+        return println(s.c_str());
     }
     
     // Read from both (USB has priority, then UART)
@@ -67,8 +137,11 @@ public:
     }
     
     void flush() override {
-        uart->flush();
-        usb->flush();
+        if (writeMutex && xSemaphoreTake(writeMutex, portMAX_DELAY) == pdTRUE) {
+            uart->flush();
+            if (usb) usb->flush();
+            xSemaphoreGive(writeMutex);
+        }
     }
     
     // Expose operator bool for connection checking

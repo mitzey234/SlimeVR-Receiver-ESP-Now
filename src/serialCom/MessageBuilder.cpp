@@ -187,8 +187,7 @@ namespace SlimeVR
 
     void MessageBuilder::print()
     {
-        for (uint16_t i = 0; i < head; i++) Serial.printf("%c", buffer[i]);
-        Serial.println();
+        Serial.writeLine(buffer, head);
     }
 }
 

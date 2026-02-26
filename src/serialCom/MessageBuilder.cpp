@@ -112,6 +112,26 @@ namespace SlimeVR
         return writeBytes(bytes, sizeof(uint16_t));
     }
 
+    bool MessageBuilder::writeUInt32(uint32_t value)
+    {
+        uint8_t bytes[4];
+        bytes[0] = static_cast<uint8_t>(value & 0xFF);
+        bytes[1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+        bytes[2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+        bytes[3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+        return writeBytes(bytes, sizeof(uint32_t));
+    }
+
+    bool MessageBuilder::writeInt32(int32_t value)
+    {
+        uint8_t bytes[4];
+        bytes[0] = static_cast<uint8_t>(value & 0xFF);
+        bytes[1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+        bytes[2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+        bytes[3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+        return writeBytes(bytes, sizeof(int32_t));
+    }
+
     bool MessageBuilder::writeMacAddress(const uint8_t mac[6])
     {
         if (!mac)
@@ -149,6 +169,18 @@ namespace SlimeVR
         
         // Write RSSI
         if (!writeInt8(tracker.rssi))
+        {
+            return false;
+        }
+
+        // Write bytes per second
+        if (!writeUInt16(tracker.bytesPerSecond))
+        {
+            return false;
+        }
+
+        // Write packets per second
+        if (!writeUInt16(tracker.packetsPerSecond))
         {
             return false;
         }

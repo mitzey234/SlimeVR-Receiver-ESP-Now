@@ -31,11 +31,6 @@ ESPNowCommunication &ESPNowCommunication::getInstance() {
     return instance;
 }
 
-// Adds a callback method for when a tracker is paired
-void ESPNowCommunication::onTrackerPaired(std::function<void()> callback) {
-    trackerPairedCallbacks.push_back(callback);
-}
-
 // Adds a callback method for when a tracker is connected
 void ESPNowCommunication::onTrackerConnected(std::function<void(Tracker)> callback) {
     trackerConnectedCallbacks.push_back(std::move(callback));
@@ -44,11 +39,6 @@ void ESPNowCommunication::onTrackerConnected(std::function<void(Tracker)> callba
 // Adds a callback method for when a tracker is disconnected
 void ESPNowCommunication::onTrackerDisconnected(std::function<void(Tracker)> callback) {
     trackerDisconnectedCallbacks.push_back(std::move(callback));
-}
-
-// Invokes all registered tracker paired event callbacks
-void ESPNowCommunication::invokeTrackerPairedEvent() {
-    for (auto &callback : trackerPairedCallbacks) callback();
 }
 
 // Invokes all registered tracker connected event callbacks
@@ -126,7 +116,7 @@ bool ESPNowCommunication::enterPairingMode() {
     statusManager.setStatus(SlimeVR::Status::PAIRING_MODE, true);
 
     if (SlimeVR::SerialCom::comEnabled()) {
-        // TODO: Tell our dongle software
+        SlimeVR::SerialComMessages::PairingMode::print();
     }
     return true;
 }
@@ -138,7 +128,7 @@ void ESPNowCommunication::exitPairingMode() {
     statusManager.setStatus(SlimeVR::Status::PAIRING_MODE, false);
 
     if (SlimeVR::SerialCom::comEnabled()) {
-        // TODO: Tell our dongle software
+        SlimeVR::SerialComMessages::PairingMode::print();
     }
 }
 
@@ -332,7 +322,6 @@ ErrorCodes ESPNowCommunication::begin() {
 
     // Pre-allocate vectors to avoid reallocations during operation
     connectedTrackers.reserve(16); // Reserve space for up to 16 trackers
-    trackerPairedCallbacks.reserve(4);
     trackerConnectedCallbacks.reserve(4);
     trackerDisconnectedCallbacks.reserve(4);
 
@@ -414,6 +403,9 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         // Update RSSI for this tracker
         tracker->rssi = senderInfo->rx_ctrl->rssi;
 
+        tracker->bytesReceived += message->packet.len;
+        tracker->packetsReceived += 1;
+
         // Forward packet to PacketHandling with RSSI
         PacketHandling::getInstance().insert(message->packet.data, message->packet.len, senderInfo->rx_ctrl->rssi);
         return;
@@ -451,9 +443,6 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         queueMessage(senderInfo->src_addr, reinterpret_cast<uint8_t *>(&ackMessage), sizeof(ackMessage), false, true);
 
         pairingStartTime = millis();
-
-        // Step 3: Invoke paired event
-        invokeTrackerPairedEvent();
         break;
     }
     case ESPNowMessageTypes::PAIRING_RESPONSE:
@@ -513,6 +502,7 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         newTracker.trackerId = trackerId;
         newTracker.waitingForResponse = false;
         newTracker.missedPings = 0;
+        newTracker.lastDeltaTime = millis();
         connectedTrackers.push_back(newTracker);
 
         Serial.printf("Connected tracker " MACSTR " (ID: %d)\n", MAC2ARGS(senderInfo->src_addr), trackerId);
@@ -670,8 +660,11 @@ void ESPNowCommunication::scanningLoop() {
         enteredPromiscuousMode = true;
         Serial.println("Entered promiscuous mode for environment scanning");
 
+        scanningTime = scansRun >= 1 ? scanningChannelDuration*2 : scanningChannelDuration;
+
         if (SlimeVR::SerialCom::comEnabled()) {
-            // TODO: Tell our dongle software
+            SlimeVR::SerialComMessages::EnvironmentScanMode::print(scanningTime);
+            SlimeVR::SerialComMessages::TrackerUpdate::print(0, 0);
         }
     }
 
@@ -682,10 +675,12 @@ void ESPNowCommunication::scanningLoop() {
         uint8_t currentChannel = WiFi.channel();
         size_t uniqueBSSIDs = channelBSSIDs[currentChannel].size();
         unsigned long elapsedTime = millis() - scanningChannelStartTime;
-        Serial.printf("Scanning Channel %2d: %10u score, %u APs (%lu ms elapsed)\n", currentChannel, channelBytesSeen[currentChannel], uniqueBSSIDs , elapsedTime);
+        if (SlimeVR::SerialCom::comEnabled()) {
+            SlimeVR::SerialComMessages::EnvironmentScanProgress::print(currentChannel, channelBytesSeen[currentChannel], uniqueBSSIDs, elapsedTime);
+        } else Serial.printf("Scanning Channel %2d: %10u score, %u APs (%lu ms elapsed)\n", currentChannel, channelBytesSeen[currentChannel], uniqueBSSIDs , elapsedTime);
     }
     
-    if (millis() - scanningChannelStartTime >= (scansRun >= 1 ? scanningChannelDuration*2 : scanningChannelDuration)) {
+    if (millis() - scanningChannelStartTime >= scanningTime) {
         uint8_t currentChannel = WiFi.channel();
         if (currentChannel >= 11) {
             // Finished scanning all channels
@@ -735,6 +730,11 @@ void ESPNowCommunication::scanningLoop() {
                 Configuration::getInstance().setWifiChannel((uint8_t)bestChannel);
             }
 
+            if (SlimeVR::SerialCom::comEnabled()) {
+                //TODO: Send final results to SerialCom
+                SlimeVR::SerialComMessages::EnvironmentScanMode::print(0);
+            }
+
             //Restart wifi
             begin();
             scanningEnvironment = false;
@@ -753,6 +753,13 @@ void ESPNowCommunication::scanningLoop() {
 // Main update loop to be called regularly
 void ESPNowCommunication::update() {
     const unsigned long currentTime = millis();
+    
+    // Throttle updates to reduce CPU usage - skip if called too frequently
+    // This prevents excessive polling when update() is called in a tight loop
+    if (currentTime - lastUpdateTime < minUpdateInterval) {
+        return;
+    }
+    lastUpdateTime = currentTime;
 
     // PRIORITY 1: Handle heartbeat system FIRST - critical for connection stability
     // Process heartbeats before stats/pairing to maintain accurate timing
@@ -762,6 +769,13 @@ void ESPNowCommunication::update() {
         //For each connected tracker
         for (auto it = connectedTrackers.begin(); it != connectedTrackers.end();) {
             auto &tracker = *it;
+
+            uint32_t deltaTime = currentTime - tracker.lastDeltaTime;
+            tracker.lastDeltaTime = currentTime;
+            tracker.bytesPerSecond = (tracker.bytesReceived * 1000) / deltaTime;
+            tracker.packetsPerSecond = (tracker.packetsReceived * 1000) / deltaTime;
+            tracker.bytesReceived = 0;
+            tracker.packetsReceived = 0;
 
             // Check if waiting for response and timeout has occurred
             if (tracker.waitingForResponse) {
@@ -1024,14 +1038,14 @@ void ESPNowCommunication::exitEnvironmentScanningMode() {
     scanningEnvironment = false;
     statusManager.setStatus(SlimeVR::Status::SCANNING, false);
     if (SlimeVR::SerialCom::comEnabled()) {
-        // TODO: Tell our dongle software
+        SlimeVR::SerialComMessages::EnvironmentScanMode::print(0);
     }
 }
 
 void ESPNowCommunication::UnpairAllTrackers() {
     Serial.println("Trackers reset");
     if (SlimeVR::SerialCom::comEnabled()) {
-        // TODO: Tell our dongle software that all trackers are unpaired
+        SlimeVR::SerialComMessages::AllTrackersUnpaired::print();
     }
     Configuration::getInstance().clearAllPairedTrackers();
     sendUnpairToAllTrackers();

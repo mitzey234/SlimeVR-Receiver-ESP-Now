@@ -65,9 +65,7 @@ void LEDManager::update() {
 	unsigned long diff = time - m_LastUpdate;
 
 	// Don't tick the LEDManager *too* often
-	if (diff < 10) {
-		return;
-	}
+	if (diff < 100) return;
 
 	m_LastUpdate = time;
 

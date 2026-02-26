@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <WiFi.h>
 #include "espnow/espnow.h"
+#include "./serialCom/SerialCom.h"
 
 #define DEFAULT_WIFI_CHANNEL 6
 
@@ -40,7 +41,7 @@ void Configuration::forEachPairedTracker(std::function<void(const uint8_t mac[6]
 
 void Configuration::setWifiChannel(uint8_t channel) {
     auto result = WiFi.setChannel(channel);
-        if (result != 0) {
+    if (result != 0) {
         Serial.printf("[Config] Failed to set WiFi channel to %d - error %d\n", channel, result);
         return;
     }
@@ -50,6 +51,9 @@ void Configuration::setWifiChannel(uint8_t channel) {
     ESPNowCommunication::channel = channel;
     Serial.printf("[Config] WiFi channel set to %d and saved to %s\n", channel, wifiChannelPath);
     ESPNowCommunication::getInstance().disconnectAllTrackers();
+    if (SlimeVR::SerialCom::comEnabled()) {
+        SlimeVR::SerialComMessages::UpdateChannel::print();
+    }
 }
 
 uint8_t Configuration::getWifiChannel() {
@@ -220,6 +224,15 @@ void Configuration::addPairedTracker(const uint8_t mac[6]) {
     auto file = LittleFS.open(pairedTrackersPath, "a");
     file.write(mac, 6);
     file.close();
+
+    if (SlimeVR::SerialCom::comEnabled()) {
+        uint8_t trackerId;
+        if (getTrackerIdForMac(mac, trackerId)) {
+            uint8_t macCopy[6];
+            memcpy(macCopy, mac, 6);
+            SlimeVR::SerialComMessages::TrackerPaired::print(macCopy, trackerId); // Notify pairing
+        }
+    }
 }
 
 void Configuration::removePairedTracker(const uint8_t mac[6]) {
@@ -244,13 +257,12 @@ void Configuration::removePairedTracker(const uint8_t mac[6]) {
     file.write(remainingMacs.data(), remainingMacs.size());
     file.close();
 
-
+    uint8_t trackerId;
     // Remove tracker ID for this MAC
     if (LittleFS.exists(trackerIdsPath)) {
         std::vector<uint8_t> remainingData;
         auto idFile = LittleFS.open(trackerIdsPath, "r");
         uint8_t idMac[6];
-        uint8_t trackerId;
         while (idFile.read(idMac, 6) == 6 && idFile.read(&trackerId, 1) == 1) {
             if (memcmp(idMac, mac, 6) != 0) {
                 for (int i = 0; i < 6; i++) {
@@ -271,6 +283,12 @@ void Configuration::removePairedTracker(const uint8_t mac[6]) {
     
     Serial.printf("Removed paired tracker: %02x:%02x:%02x:%02x:%02x:%02x\n",
                   mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    
+    if (SlimeVR::SerialCom::comEnabled()) {
+        uint8_t macCopy[6];
+        memcpy(macCopy, mac, 6);
+        SlimeVR::SerialComMessages::TrackerUnpaired::print(macCopy, trackerId); // Notify unpairing
+    }
 }
 
 void Configuration::clearAllPairedTrackers() {

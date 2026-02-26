@@ -18,6 +18,7 @@ namespace SlimeVR
                     builder.writeUInt8(static_cast<uint8_t>(SerialComMessageTypes::IDENT));
                     builder.writeString(USB_PRODUCT);
                     builder.writeString(FIRMWARE_VERSION);
+                    builder.writeString(ARDUINO_BOARD);
                     uint8_t macaddr[6];
                     WiFi.macAddress(macaddr);
                     builder.writeMacAddress(macaddr);

@@ -76,14 +76,6 @@ void setup() {
         fail(result);
     }
 
-    espnow.onTrackerPaired([&]() { 
-        //espnow.exitPairingMode();
-
-        if (SlimeVR::SerialCom::comEnabled()) {
-            // TODO: Tell our dongle software
-        }
-    });
-
     espnow.onTrackerConnected([&](ESPNowCommunication::Tracker tracker) {
         uint8_t packet[16];
         packet[0] = 0xff;
@@ -92,7 +84,8 @@ void setup() {
         PacketHandling::getInstance().insert(packet, 16);
 
         if (SlimeVR::SerialCom::comEnabled()) {
-            SlimeVR::SerialComMessages::TrackerConnected::print(tracker);
+            // Disabled for now cause less messages upstream is better
+            //SlimeVR::SerialComMessages::TrackerConnected::print(tracker);
         }
     });
 
@@ -101,7 +94,8 @@ void setup() {
         PacketHandling::getInstance().sendDisconnectionStatus(tracker.trackerId);
 
         if (SlimeVR::SerialCom::comEnabled()) {
-            SlimeVR::SerialComMessages::TrackerDisconnected::print(tracker);
+            // Disabled for now cause less messages upstream is better
+            //SlimeVR::SerialComMessages::TrackerDisconnected::print(tracker);
         }
     });
 
@@ -119,4 +113,7 @@ void loop() {
     consoleCommandHandler.update();
 
     PacketHandling::getInstance().tick(hidDevice);
+    
+    // Small delay to allow ESP32 to yield to background tasks and reduce CPU usage
+    delayMicroseconds(750);
 }

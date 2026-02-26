@@ -20,11 +20,13 @@ namespace SlimeVR
             bool writeBytes(const uint8_t* data, uint16_t length);
             bool writeUInt8(uint8_t value);
             bool writeUInt16(uint16_t value);
+            bool writeUInt32(uint32_t value);
             bool writeMacAddress(const uint8_t mac[6]);
             bool writeTracker(ESPNowCommunication::Tracker tracker);
             bool writePairedTracker(const uint8_t mac[6], uint8_t trackerId);
             bool writeInt8(int8_t value);
             bool writeInt16(int16_t value);
+            bool writeInt32(int32_t value);
             bool writeBool(bool value);
             const uint8_t* getBuffer() const { return buffer; }
             void print();

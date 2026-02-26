@@ -20,6 +20,11 @@ class ESPNowCommunication {
             uint8_t missedPings = 0;
             uint8_t latency = 0;
             int8_t rssi = 0;  // Signal strength in dBm
+            uint16_t bytesReceived = 0; // Total bytes received from this tracker
+            uint16_t packetsReceived = 0; // Total packets received from this tracker
+            uint16_t bytesPerSecond = 0; // Calculated bytes per second
+            uint16_t packetsPerSecond = 0; // Calculated packets per second
+            uint32_t lastDeltaTime = 0; // Time since pps and bps were last calculated, used for accurate rate calculations
         };
         
         static constexpr size_t packetSizeBytes = 240;
@@ -44,7 +49,6 @@ class ESPNowCommunication {
 
         void update();
 
-        void onTrackerPaired(std::function<void()> callback);
         void onTrackerConnected(std::function<void(Tracker)> callback);
         void onTrackerDisconnected(std::function<void(Tracker)> callback);  // Passes tracker structure
         
@@ -73,7 +77,6 @@ class ESPNowCommunication {
 
         esp_now_rate_config_t rate_config;
 
-        void invokeTrackerPairedEvent();
         void invokeTrackerConnectedEvent(Tracker tracker);
         void invokeTrackerDisconnectedEvent(Tracker tracker);
         void sendRateUpdateToAllTrackers();
@@ -101,7 +104,6 @@ class ESPNowCommunication {
         static constexpr uint8_t maxMissedPings = 5;
         uint16_t expectedSequenceNumber = 0;
 
-        std::vector<std::function<void()>> trackerPairedCallbacks;
         std::vector<std::function<void(Tracker)>> trackerConnectedCallbacks;
         std::vector<std::function<void(Tracker)>> trackerDisconnectedCallbacks;
 
@@ -111,7 +113,9 @@ class ESPNowCommunication {
         unsigned long lastPairingBroadcast = 0;
         unsigned long pairingStartTime = 0;
         unsigned long lastHeartbeatCheck = 0;
+        unsigned long lastUpdateTime = 0;
         static constexpr unsigned long pairingBroadcastInterval = 100;
+        static constexpr unsigned long minUpdateInterval = 10;  // Minimum 10ms between update() calls
 
         // Send queue for rate limiting
         struct PendingMessage {
@@ -167,6 +171,7 @@ class ESPNowCommunication {
         bool scanningEnvironment = false;
         bool enteredPromiscuousMode = false;
         long unsigned long scanningChannelStartTime = 0;
+        int scanningTime = 0;
         long unsigned int scanningChannelDuration = 5000; // 5 seconds per channel
         void scanningLoop();
         void rxPromiscuousPacket(void* buf, wifi_promiscuous_pkt_type_t type);

@@ -1,5 +1,6 @@
 #include "HID.h"
 #include "GlobalVars.h"
+#include "serialCom/SerialCom.h"
 
 #include <cstring>
 #include <Arduino.h>
@@ -22,7 +23,10 @@ static void usbEventCallback(void *arg, esp_event_base_t event_base, int32_t eve
     arduino_usb_cdc_event_data_t *data = (arduino_usb_cdc_event_data_t *)event_data;
     switch (event_id) {
       case ARDUINO_USB_CDC_CONNECTED_EVENT:    Serial.println("CDC CONNECTED"); break;
-      case ARDUINO_USB_CDC_DISCONNECTED_EVENT: Serial.println("CDC DISCONNECTED"); break;
+      case ARDUINO_USB_CDC_DISCONNECTED_EVENT:
+        Serial.println("CDC DISCONNECTED");
+        SlimeVR::SerialCom::getInstance().enabled = false;
+        break;
       case ARDUINO_USB_CDC_LINE_STATE_EVENT:   Serial.printf("CDC LINE STATE: dtr: %u, rts: %u\n", data->line_state.dtr, data->line_state.rts); break;
       case ARDUINO_USB_CDC_LINE_CODING_EVENT:
         Serial.printf(

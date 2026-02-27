@@ -27,7 +27,7 @@ void fail(ErrorCodes errorCode) {
     abort();
 }
 
-void setup() { 
+void setup() {
     hidDevice.begin();
     Serial.printf("Starting up " USB_PRODUCT  "  - " FIRMWARE_VERSION "\n");
 
@@ -113,7 +113,4 @@ void loop() {
     consoleCommandHandler.update();
 
     PacketHandling::getInstance().tick(hidDevice);
-    
-    // Small delay to allow ESP32 to yield to background tasks and reduce CPU usage
-    delayMicroseconds(750);
 }

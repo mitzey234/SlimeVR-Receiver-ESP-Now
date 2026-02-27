@@ -16,7 +16,7 @@ namespace SlimeVR
                     MessageBuilder builder;
                     builder.writeStringRaw(SlimeVR::SerialCom::getPrefix());
                     builder.writeUInt8(static_cast<uint8_t>(SerialComMessageTypes::ENVIRONMENT_SCAN_RESULT));
-
+                    
                     builder.print();
                     builder.Destroy(); // Clean up buffer after use
                     return true;

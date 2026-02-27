@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Arduino.h>
 #include "MessageBuilder.h"
 #include "./SerialCom.h"
 #include "../GlobalVars.h"
@@ -19,6 +20,7 @@ namespace SlimeVR
                     builder.writeString(USB_PRODUCT);
                     builder.writeString(FIRMWARE_VERSION);
                     builder.writeString(ARDUINO_BOARD);
+                    builder.writeUInt32(millis() / 1000UL); // Uptime in seconds
                     uint8_t macaddr[6];
                     WiFi.macAddress(macaddr);
                     builder.writeMacAddress(macaddr);

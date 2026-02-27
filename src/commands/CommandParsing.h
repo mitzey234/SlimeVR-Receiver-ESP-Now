@@ -43,10 +43,13 @@ inline bool parseMacAddress(const String &macStr, uint8_t mac[6]) {
         }
 
         mac[i] = (hi << 4) | lo;
-        lastIdx = nextIdx + 1;
-
-        if (i < 5 && nextIdx == -1) {
-            return false;
+        if (nextIdx == -1) {
+            if (i < 5) {
+                return false;
+            }
+            lastIdx = macStr.length();
+        } else {
+            lastIdx = nextIdx + 1;
         }
     }
 

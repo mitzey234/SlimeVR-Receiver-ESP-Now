@@ -689,7 +689,7 @@ void ESPNowCommunication::scanningLoop() {
             enteredPromiscuousMode = false;
             Serial.println("Exited promiscuous mode, finished environment scanning");
             // Print channel statistics
-            Serial.println("Channel activity summary:");
+            if (!SlimeVR::SerialCom::comEnabled()) Serial.println("Channel activity summary:");
 
             //Multiply each channel by the amount of APs observed
             for (int ch = 1; ch <= 11; ++ch) {
@@ -704,12 +704,14 @@ void ESPNowCommunication::scanningLoop() {
             int primaryChannels[3] = {1, 6, 11};
             int bestPrimary = -1;
             uint32_t minPrimaryBytes = UINT32_MAX;
-            for (int ch = 1; ch <= 11; ++ch) {
-                size_t uniqueAPs = channelBSSIDs[ch].size();
-                Serial.printf("Channel %2d: %10u score, %u unique APs\n", ch, channelBytesSeen[ch], uniqueAPs);
-                if (channelBytesSeen[ch] < minBytes) {
-                    minBytes = channelBytesSeen[ch];
-                    bestChannel = ch;
+            if (!SlimeVR::SerialCom::comEnabled()) {
+                for (int ch = 1; ch <= 11; ++ch) {
+                    size_t uniqueAPs = channelBSSIDs[ch].size();
+                    Serial.printf("Channel %2d: %10u score, %u unique APs\n", ch, channelBytesSeen[ch], uniqueAPs);
+                    if (channelBytesSeen[ch] < minBytes) {
+                        minBytes = channelBytesSeen[ch];
+                        bestChannel = ch;
+                    }
                 }
             }
             // Check if any primary channel is as good as the best
@@ -723,22 +725,22 @@ void ESPNowCommunication::scanningLoop() {
                 }
             }
             if (bestPrimary != -1) {
-                Serial.printf("Best channel to use (primary preferred): %d (activity: %u score)\n", bestPrimary, channelBytesSeen[bestPrimary]);
+                if (!SlimeVR::SerialCom::comEnabled()) Serial.printf("Best channel to use (primary preferred): %d (activity: %u score)\n", bestPrimary, channelBytesSeen[bestPrimary]);
                 Configuration::getInstance().setWifiChannel((uint8_t)bestPrimary);
             } else {
-                Serial.printf("Best channel to use: %d (lowest activity: %u score)\n", bestChannel, minBytes);
+                if (!SlimeVR::SerialCom::comEnabled()) Serial.printf("Best channel to use: %d (lowest activity: %u score)\n", bestChannel, minBytes);
                 Configuration::getInstance().setWifiChannel((uint8_t)bestChannel);
             }
 
+            scanningEnvironment = false;
+            statusManager.setStatus(SlimeVR::Status::SCANNING, false);
             if (SlimeVR::SerialCom::comEnabled()) {
                 //TODO: Send final results to SerialCom
                 SlimeVR::SerialComMessages::EnvironmentScanMode::print(0);
             }
-
+            
             //Restart wifi
             begin();
-            scanningEnvironment = false;
-            statusManager.setStatus(SlimeVR::Status::SCANNING, false);
         } else {
             // Move to next channel
             WiFi.setChannel(WiFi.channel() + 1);

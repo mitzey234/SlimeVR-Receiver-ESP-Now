@@ -10,6 +10,7 @@
 #include "StartOtaUpdateCommand.h"
 #include "SCOFFCommand.h"
 #include "TemperatureCommand.h"
+#include "UptimeCommand.h"
 #include "UnknownCommand.h"
 #include "UnpairAllCommand.h"
 #include "UnpairCommand.h"
@@ -27,6 +28,7 @@ void processConsoleCommand(const String &command) {
     if (handleScanEnvCommand(command)) return;
     if (handleSCOFFCommand(command)) return;
     if (handleTemperatureCommand(command)) return;
+    if (handleUptimeCommand(command)) return;
     if (handleUnpairAllCommand(command)) return;
     if (handleSCInitCommand(command)) return;
 

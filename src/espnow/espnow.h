@@ -12,7 +12,23 @@
 
 class ESPNowCommunication {
     public:
-        static constexpr size_t packetSizeBytes = 240;
+        // Heartbeat tracking structure
+        struct Tracker {
+            std::array<uint8_t, 6> mac;
+            uint8_t trackerId;
+            bool waitingForResponse = false;
+            uint8_t missedPings = 0;
+            uint8_t latency = 0;
+            int8_t rssi = 0;  // Signal strength in dBm
+            uint16_t bytesReceived = 0; // Total bytes received from this tracker
+            uint16_t packetsReceived = 0; // Total packets received from this tracker
+            uint16_t bytesPerSecond = 0; // Calculated bytes per second
+            uint16_t packetsPerSecond = 0; // Calculated packets per second
+            uint32_t lastDeltaTime = 0; // Time since pps and bps were last calculated, used for accurate rate calculations
+            uint32_t lastRegistrationTime = 0; // Timestamp of when the tracker was registered
+        };
+        
+        static constexpr size_t packetSizeBytes = 128;
 
         static unsigned int channel;
 
@@ -22,7 +38,7 @@ class ESPNowCommunication {
 
         ErrorCodes begin();
 
-        void enterPairingMode();
+        bool enterPairingMode();
         void exitPairingMode();
         bool isInPairingMode() const { return pairing; }
         
@@ -34,23 +50,27 @@ class ESPNowCommunication {
 
         void update();
 
-        void onTrackerPaired(std::function<void()> callback);
-        void onTrackerConnected(std::function<void(const uint8_t *)> callback);
-        void onTrackerDisconnected(std::function<void(uint8_t)> callback);  // Passes tracker ID
+        void onTrackerConnected(std::function<void(Tracker)> callback);
+        void onTrackerDisconnected(std::function<void(Tracker)> callback);  // Passes tracker structure
         
         size_t getConnectedTrackerCount() const;
         bool getTrackerMacByIndex(size_t index, uint8_t mac[6]) const;
         uint8_t* getTrackerIdByIndex(size_t index);
+        Tracker* getTrackerByIndex(size_t index);
         uint8_t securityCode[8];
 
         bool isTrackerConnected(const uint8_t peerMac[6]);
 
         void startOtaUpdate(const uint8_t auth[16], long port, const uint8_t ip[4], const char ssid[33], const char password[65]);
 
-        void enterEnvironmentScanningMode() { scanningEnvironment = true; }
+        void enterEnvironmentScanningMode() { 
+            scanningEnvironment = true;
+        }
         void exitEnvironmentScanningMode();
         bool isScanningEnvironment() const { return scanningEnvironment; }
         void UnpairAllTrackers();
+
+        Tracker* getTracker(const uint8_t peerMac[6]);
 
     private:
         static ESPNowCommunication instance;
@@ -58,28 +78,16 @@ class ESPNowCommunication {
 
         esp_now_rate_config_t rate_config;
 
-        void invokeTrackerPairedEvent();
-        void invokeTrackerConnectedEvent(const uint8_t *trackerMacAddress);
-        void invokeTrackerDisconnectedEvent(uint8_t trackerId);
+        void invokeTrackerConnectedEvent(Tracker tracker);
+        void invokeTrackerDisconnectedEvent(Tracker tracker);
         void sendRateUpdateToAllTrackers();
 
         static void onReceive(const esp_now_recv_info_t *senderInfo, const uint8_t *data, int dataLen);
         void __attribute__((hot)) __attribute__((flatten)) handleMessage(const esp_now_recv_info_t *senderInfo, const uint8_t *data, int dataLen);
 
-        // Heartbeat tracking structure
-        struct Tracker {
-            std::array<uint8_t, 6> mac;
-            uint8_t trackerId;
-            bool waitingForResponse = false;
-            uint8_t missedPings = 0;
-            uint8_t latency = 0;
-            int8_t rssi = 0;  // Signal strength in dBm
-        };
-
         uint8_t addPeer(const uint8_t peerMac[6]);
         uint8_t addPeer(const uint8_t peerMac[6], bool defaultConfig);
         bool deletePeer(const uint8_t peerMac[6]);
-        Tracker* getTracker(const uint8_t peerMac[6]);
 
         bool pairing = false;
 
@@ -97,9 +105,8 @@ class ESPNowCommunication {
         static constexpr uint8_t maxMissedPings = 5;
         uint16_t expectedSequenceNumber = 0;
 
-        std::vector<std::function<void()>> trackerPairedCallbacks;
-        std::vector<std::function<void(const uint8_t *)>> trackerConnectedCallbacks;
-        std::vector<std::function<void(uint8_t)>> trackerDisconnectedCallbacks;
+        std::vector<std::function<void(Tracker)>> trackerConnectedCallbacks;
+        std::vector<std::function<void(Tracker)>> trackerDisconnectedCallbacks;
 
         static constexpr uint8_t broadcastAddress[6]{0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
         static constexpr uint8_t espnowWifiChannel = 6;
@@ -107,7 +114,9 @@ class ESPNowCommunication {
         unsigned long lastPairingBroadcast = 0;
         unsigned long pairingStartTime = 0;
         unsigned long lastHeartbeatCheck = 0;
+        unsigned long lastUpdateTime = 0;
         static constexpr unsigned long pairingBroadcastInterval = 100;
+        static constexpr unsigned long minUpdateInterval = 10;  // Minimum 10ms between update() calls
 
         // Send queue for rate limiting
         struct PendingMessage {
@@ -163,9 +172,12 @@ class ESPNowCommunication {
         bool scanningEnvironment = false;
         bool enteredPromiscuousMode = false;
         long unsigned long scanningChannelStartTime = 0;
+        int scanningTime = 0;
         long unsigned int scanningChannelDuration = 5000; // 5 seconds per channel
         void scanningLoop();
         void rxPromiscuousPacket(void* buf, wifi_promiscuous_pkt_type_t type);
         int scansRun = 0;
+
+        static constexpr unsigned long registrationIntervalMs = 500; // 0.5 second
 
 };

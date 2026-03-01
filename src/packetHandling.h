@@ -16,8 +16,10 @@ public:
     static PacketHandling &getInstance();
 
     void insert(const uint8_t *data, uint8_t len, int8_t rssi = 0);
+    void insertPriority(const uint8_t *data, uint8_t len);
     void sendDisconnectionStatus(uint8_t trackerId);
     void tick(HIDDevice &hidDevice);
+    void createRegistrationReport(uint8_t *report, ESPNowCommunication::Tracker tracker);
 
 private:
     struct Packet {
@@ -36,6 +38,7 @@ private:
     static constexpr unsigned long registrationIntervalMs = 200;  // Only send registrations every 200ms when no data
     static constexpr unsigned long minSendIntervalMs = 0;   // Minimum 1ms between USB transfers
     CircularBuffer<Packet, bufferSize> buffer;
+    CircularBuffer<Packet, bufferSize> priorityBuffer;  // Separate buffer for high-priority packets like registrations
 
     unsigned long lastDiscoSweep = 0;
     

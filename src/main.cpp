@@ -77,12 +77,6 @@ void setup() {
     }
 
     espnow.onTrackerConnected([&](ESPNowCommunication::Tracker tracker) {
-        uint8_t packet[16];
-        packet[0] = 0xff;
-        memcpy(&packet[2], tracker.mac.data(), sizeof(uint8_t) * 6);
-        memset(&packet[8], 0, sizeof(uint8_t) * 8);
-        PacketHandling::getInstance().insert(packet, 16);
-
         if (SlimeVR::SerialCom::comEnabled()) {
             // Disabled for now cause less messages upstream is better
             //SlimeVR::SerialComMessages::TrackerConnected::print(tracker);

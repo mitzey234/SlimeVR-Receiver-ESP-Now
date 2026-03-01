@@ -25,9 +25,10 @@ class ESPNowCommunication {
             uint16_t bytesPerSecond = 0; // Calculated bytes per second
             uint16_t packetsPerSecond = 0; // Calculated packets per second
             uint32_t lastDeltaTime = 0; // Time since pps and bps were last calculated, used for accurate rate calculations
+            uint32_t lastRegistrationTime = 0; // Timestamp of when the tracker was registered
         };
         
-        static constexpr size_t packetSizeBytes = 240;
+        static constexpr size_t packetSizeBytes = 128;
 
         static unsigned int channel;
 
@@ -176,5 +177,7 @@ class ESPNowCommunication {
         void scanningLoop();
         void rxPromiscuousPacket(void* buf, wifi_promiscuous_pkt_type_t type);
         int scansRun = 0;
+
+        static constexpr unsigned long registrationIntervalMs = 500; // 0.5 second
 
 };

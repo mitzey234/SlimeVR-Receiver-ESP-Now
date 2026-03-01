@@ -11,7 +11,7 @@ namespace SlimeVR
     {
         class EnvironmentScanProgress {
             public:
-                static bool print(int currentChannel, int channelBytesSeen, int uniqueBSSIDs, int elapsedTime) {
+                static bool print(int currentChannel, int channelBytesSeen, int uniqueBSSIDs, int elapsedTime, int scanningTime) {
                     // Constructor can be used for initialization if needed
                     MessageBuilder builder;
                     builder.writeStringRaw(SlimeVR::SerialCom::getPrefix());
@@ -20,6 +20,7 @@ namespace SlimeVR
                     builder.writeUInt32(channelBytesSeen);
                     builder.writeUInt16(uniqueBSSIDs);
                     builder.writeUInt16(elapsedTime);
+                    builder.writeUInt16(scanningTime);
                     builder.print();
                     builder.Destroy(); // Clean up buffer after use
                     return true;

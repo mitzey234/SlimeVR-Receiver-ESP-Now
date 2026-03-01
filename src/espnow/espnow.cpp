@@ -375,10 +375,8 @@ ErrorCodes ESPNowCommunication::begin() {
 
 // ESPNOW receive callback
 void ESPNowCommunication::onReceive(const esp_now_recv_info_t *senderInfo, const uint8_t *data, int dataLen) {
-    if (ESPNowCommunication::getInstance().isScanningEnvironment()) {
-        // Ignore received packets while in scanning mode
-        return;
-    }
+    // Ignore received packets while in scanning mode
+    if (ESPNowCommunication::getInstance().isScanningEnvironment()) return;
     ESPNowCommunication::getInstance().handleMessage(senderInfo, data, dataLen);
 }
 
@@ -506,6 +504,10 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         connectedTrackers.push_back(newTracker);
 
         Serial.printf("Connected tracker " MACSTR " (ID: %d)\n", MAC2ARGS(senderInfo->src_addr), trackerId);
+
+        uint8_t registrationPacket[16] = {0};
+        PacketHandling::getInstance().createRegistrationReport(registrationPacket, newTracker);
+        PacketHandling::getInstance().insertPriority(registrationPacket, 16);
 
         // Step 4: Send rate update to newly connected trackers
         sendRateUpdateNextTick = true;
@@ -676,7 +678,7 @@ void ESPNowCommunication::scanningLoop() {
         size_t uniqueBSSIDs = channelBSSIDs[currentChannel].size();
         unsigned long elapsedTime = millis() - scanningChannelStartTime;
         if (SlimeVR::SerialCom::comEnabled()) {
-            SlimeVR::SerialComMessages::EnvironmentScanProgress::print(currentChannel, channelBytesSeen[currentChannel], uniqueBSSIDs, elapsedTime);
+            SlimeVR::SerialComMessages::EnvironmentScanProgress::print(currentChannel, channelBytesSeen[currentChannel], uniqueBSSIDs, elapsedTime, scanningTime);
         } else Serial.printf("Scanning Channel %2d: %10u score, %u APs (%lu ms elapsed)\n", currentChannel, channelBytesSeen[currentChannel], uniqueBSSIDs , elapsedTime);
     }
     
@@ -724,21 +726,27 @@ void ESPNowCommunication::scanningLoop() {
                     }
                 }
             }
+
+            int selected = 0;
             if (bestPrimary != -1) {
                 if (!SlimeVR::SerialCom::comEnabled()) Serial.printf("Best channel to use (primary preferred): %d (activity: %u score)\n", bestPrimary, channelBytesSeen[bestPrimary]);
                 Configuration::getInstance().setWifiChannel((uint8_t)bestPrimary);
+                selected = bestPrimary;
             } else {
                 if (!SlimeVR::SerialCom::comEnabled()) Serial.printf("Best channel to use: %d (lowest activity: %u score)\n", bestChannel, minBytes);
                 Configuration::getInstance().setWifiChannel((uint8_t)bestChannel);
+                selected = bestChannel;
             }
+
+            delay(100); // Short delay to ensure all promiscuous mode operations have settled before restarting WiFi
 
             scanningEnvironment = false;
             statusManager.setStatus(SlimeVR::Status::SCANNING, false);
             if (SlimeVR::SerialCom::comEnabled()) {
-                //TODO: Send final results to SerialCom
+                SlimeVR::SerialComMessages::EnvironmentScanResults::print(channelBytesSeen, selected);
                 SlimeVR::SerialComMessages::EnvironmentScanMode::print(0);
             }
-            
+
             //Restart wifi
             begin();
         } else {
@@ -778,6 +786,13 @@ void ESPNowCommunication::update() {
             tracker.packetsPerSecond = (tracker.packetsReceived * 1000) / deltaTime;
             tracker.bytesReceived = 0;
             tracker.packetsReceived = 0;
+
+            if (currentTime - tracker.lastRegistrationTime >= registrationIntervalMs) {
+                uint8_t registrationPacket[16] = {0};
+                PacketHandling::getInstance().createRegistrationReport(registrationPacket, tracker);
+                PacketHandling::getInstance().insertPriority(registrationPacket, 16);
+                tracker.lastRegistrationTime = currentTime;
+            }
 
             // Check if waiting for response and timeout has occurred
             if (tracker.waitingForResponse) {
@@ -932,7 +947,7 @@ void ESPNowCommunication::update() {
         }
 
         // Use shorter format to reduce blocking time
-        Serial.printf("T:%d|L:%d/%dms|RSSI:%d/%ddBm|PPS:%d|BPS:%d|Temp:%.1fC\n", trackerCount, avgLatency, highestLatency, avgRssi, maxRssi, pps, bytesPerSecond, temp_celsius);
+        Serial.printf("T:%d|L:%d/%dms|RSSI:%d/%ddBm|PPS:%d|BPS:%d|Temp:%.1fC|SC:%d\n", trackerCount, avgLatency, highestLatency, avgRssi, maxRssi, pps, bytesPerSecond, temp_celsius, SlimeVR::SerialCom::comEnabled());
     }
 
     // PRIORITY 4: Process send queue - rate limiting to prevent ESP_ERR_ESPNOW_NO_MEM

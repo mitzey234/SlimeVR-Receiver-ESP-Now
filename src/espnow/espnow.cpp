@@ -449,9 +449,9 @@ void ESPNowCommunication::handleMessage(const esp_now_recv_info_t *senderInfo, c
         const ESPNowConnectionMessage &handshake = message->connection;
         // Validate security code
         if (memcmp(handshake.securityBytes, securityCode, 8) != 0) {
-            Serial.printf("Received handshake from " MACSTR " with invalid security code! Sent: ", MAC2ARGS(senderInfo->src_addr));
-            for (int i = 0; i < 8; ++i) Serial.printf("%02x", handshake.securityBytes[i]);
-            Serial.println();
+            // Serial.printf("Received handshake from " MACSTR " with invalid security code! Sent: ", MAC2ARGS(senderInfo->src_addr));
+            // for (int i = 0; i < 8; ++i) Serial.printf("%02x", handshake.securityBytes[i]);
+            // Serial.println();
             return;
         }
 

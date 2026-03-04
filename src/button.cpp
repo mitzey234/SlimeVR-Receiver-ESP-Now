@@ -26,13 +26,6 @@ void Button::update() {
 
     // Cache current time - single millis() call
     const uint32_t currentMillis = millis();
-    
-    // Throttle button sampling to reduce CPU usage
-    // Only sample every 5ms instead of every loop iteration
-    if (currentMillis - lastSampleMillis < minSampleIntervalMs) {
-        return;
-    }
-    lastSampleMillis = currentMillis;
 
     const bool buttonState = isButtonPressed();
     const uint32_t elapsedMillis = currentMillis - lastButtonChangeMillis;

@@ -69,7 +69,9 @@ inline bool parseIpAddress(const String &ipStr, uint8_t ip[4]) {
         }
 
         ip[i] = (uint8_t)octetVal;
-        lastIdx = nextDot + 1;
+        if (nextDot != -1) {
+            lastIdx = nextDot + 1;
+        }
 
         if (i < 3 && nextDot == -1) {
             return false;

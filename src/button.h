@@ -38,7 +38,6 @@ private:
 
     static constexpr float longPressSeconds{5.0f};
     static constexpr float multiPressMaxDelaySeconds{0.125f};
-    static constexpr uint8_t minSampleIntervalMs{5};
     static constexpr uint8_t minDebounceTimeMs{50};
 
     friend void button_isr();

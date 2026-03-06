@@ -19,6 +19,8 @@ To use the dongle, it needs to be connected to a PC through USB. You also need
 your trackers to have [compatible firmware](https://github.com/mitzey234/SlimeVR-Tracker-ESP/tree/esp-now)
 flashed onto them.
 
+You can also control this dongle through a serial console, which is useful for debugging and for pairing trackers without the need to press the button on the dongle. I recommend using [SlimeVR ESP Dongle Manager](https://github.com/mitzey234/SlimeVR-ESP-Dongle-Manager) for this, as it provides a nice GUI for managing the dongle and its paired trackers.
+
 The trackers will require pairing the first time you set them up. To achieve
 this, first you need to put the dongle into pairing mode by pressing the button
 on it once while the trackers are in pairing mode. Pairing mode is indicated by a rapidly flashing light on both the dongle and the tracker. If the pairing was successful, the tracker will stop flashing rapdidly and switch to a slower infrequent flashing pattern. The dongle only exits pairing mode after 60 seconds of inactivity, or if you press the button on it again. Pairing inactivity is reset when a new tracker is paired.

@@ -34,7 +34,7 @@ private:
     static constexpr size_t reportSize = 16;  // Each report is 16 bytes
     static constexpr size_t reportsPerTransfer = 4;  // Send 4 reports per USB transfer (64 bytes total)
     static constexpr size_t hidTransferSize = reportSize * reportsPerTransfer;  // 64 bytes total
-    static constexpr size_t bufferSize = 256;
+    static constexpr size_t bufferSize = 64;
     static constexpr unsigned long registrationIntervalMs = 200;  // Only send registrations every 200ms when no data
     static constexpr unsigned long minSendIntervalMs = 0;   // Minimum 1ms between USB transfers
     CircularBuffer<Packet, bufferSize> buffer;

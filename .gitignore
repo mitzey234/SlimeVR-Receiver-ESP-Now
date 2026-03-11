@@ -4,3 +4,5 @@ nodeProgram/node_modules/
 .cache/
 .vscode/*
 /.vscode
+
+out/

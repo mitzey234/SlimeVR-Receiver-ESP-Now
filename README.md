@@ -13,6 +13,8 @@ platformio.ini file should work.
 
 To flash the dongle, run the `pio run -t upload` command.
 
+All board types can be built using `python .\build_all.py`
+
 ## Usage
 
 To use the dongle, it needs to be connected to a PC through USB. You also need

@@ -7,6 +7,7 @@
 
 #ifndef SERIAL_H
 #define SERIAL_H
+
 extern USBCDC USBSerial;
 
 class HybridSerial : public Stream {

@@ -2,6 +2,11 @@
 #define Pins_Arduino_h
 
 #include <stdint.h>
+#ifdef __cplusplus
+// C++ has bool built-in
+#else
+#include <stdbool.h>
+#endif
 
 // Default USB Settings
 #define USB_VID          0x1209

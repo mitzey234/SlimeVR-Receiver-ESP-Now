@@ -6,7 +6,7 @@ available on ESP devices. This dongle should allow for connecting up to 19 track
 
 ## Building and Flashing
 
-To firmware currently only supports ESP32-S2 & ESP32-S3 based dongles. To get a board working, add the necessary JSON file 
+The firmware currently only supports ESP32-S2 & ESP32-S3 based devices. To get a board working, add the necessary JSON file 
 in the `boards/` directory and create a new directory and `pins_arduino.h` file
 under `variants/`. After that, adding a new `env` definition in the
 platformio.ini file should work.
@@ -17,9 +17,7 @@ All board types can be built using `python .\build_all.py`
 
 ## Usage
 
-To use the dongle, it needs to be connected to a PC through USB. You also need
-your trackers to have [compatible firmware](https://github.com/mitzey234/SlimeVR-Tracker-ESP/tree/esp-now)
-flashed onto them.
+To use the dongle, it needs to be connected to a PC through USB. You also need your trackers to have [compatible firmware](https://github.com/mitzey234/SlimeVR-Tracker-ESP/tree/esp-now) flashed onto them.
 
 You can also control this dongle through a serial console, which is useful for debugging and for pairing trackers without the need to press the button on the dongle. I recommend using [SlimeVR ESP Dongle Manager](https://github.com/mitzey234/SlimeVR-ESP-Dongle-Manager) for this, as it provides a nice GUI for managing the dongle and its paired trackers.
 

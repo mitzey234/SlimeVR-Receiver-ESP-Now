@@ -2,7 +2,7 @@
 
 This is a project that implements an alternative communication method for
 SlimeVR trackers using the [ESPNow Protocol](https://www.espressif.com/en/solutions/low-power-solutions/esp-now) 
-available on ESP devices.
+available on ESP devices. This dongle should allow for connecting up to 19 trackers to a single dongle at once, and allow pairing up to 255 trackers to a single dongle (although only 19 can be connected at once due to ESP-Now limitations). The dongle connects to the PC through USB and emulates a USB HID device, sending the tracker data to the SlimeVR server.
 
 ## Building and Flashing
 

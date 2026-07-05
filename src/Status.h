@@ -1,0 +1,18 @@
+#ifndef STATUS_STATUS_H
+#define STATUS_STATUS_H
+
+#include "Serial.h"
+
+namespace SlimeVR::Status {
+enum Status {
+	LOADING = 1 << 0,
+	PAIRING_MODE = 1 << 1,
+	READY = 1 << 2,
+	RESETTING = 1 << 3,
+	SCANNING = 1 << 4
+};
+
+const char* statusToString(Status status);
+}  // namespace SlimeVR::Status
+
+#endif

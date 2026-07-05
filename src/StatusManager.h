@@ -1,0 +1,19 @@
+#ifndef STATUS_STATUSMANAGER_H
+#define STATUS_STATUSMANAGER_H
+
+#include "Serial.h"
+#include "Status.h"
+
+namespace SlimeVR::Status {
+class StatusManager {
+public:
+	void setStatus(Status status, bool value);
+	bool hasStatus(Status status);
+	uint32_t getStatus() { return m_Status; };
+
+private:
+	uint32_t m_Status;
+};
+}  // namespace SlimeVR::Status
+
+#endif

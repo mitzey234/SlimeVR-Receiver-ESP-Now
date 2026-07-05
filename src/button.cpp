@@ -24,46 +24,52 @@ void Button::update() {
         return;
     }
 
-    auto buttonState = isButtonPressed();
-    auto elapsedMillis = millis() - lastButtonChangeMillis;
+    // Cache current time - single millis() call
+    const uint32_t currentMillis = millis();
 
-    if (!buttonState && !lastButtonState) {
+    const bool buttonState = isButtonPressed();
+    const uint32_t elapsedMillis = currentMillis - lastButtonChangeMillis;
+
+    // Detect button release (pressed -> not pressed)
+    if (!buttonState && lastButtonState) {
+        if (elapsedMillis >= minDebounceTimeMs) {
+            pressCount++;
+            lastButtonChangeMillis = currentMillis;
+        }
+        lastButtonState = false;
+        return;
+    }
+
+    // Detect button idle (not pressed for a while)
+    if (!buttonState) {
         if (elapsedMillis < multiPressMaxDelaySeconds * 1e3) {
             return;
         }
-
-        if (pressCount > 1) {
+        if (pressCount >= 1) {
             invokeMultiPressCallbacks(pressCount);
+            pressCount = 0;
         }
-
         polling = false;
         attach();
         return;
     }
 
-    if (buttonState && lastButtonState) {
-        if (elapsedMillis < longPressSeconds * 1e3 || pressCount > 0) {
-            return;
-        }
-
+    // Detect long press (held down)
+    if (elapsedMillis >= longPressSeconds * 1e3 && pressCount == 0) {
         invokeLongPressCallbacks();
         polling = false;
         attach();
-        return;
     }
 
-    if (!buttonState) {
-        pressCount++;
-    }
-
-    lastButtonState = buttonState;
-    lastButtonChangeMillis = millis();
+    lastButtonState = true;
 }
 
 void Button::initDebouncing(bool state) {
     circularBuffer = state ? 0xffff : 0x0000;
     lastButtonState = state;
-    lastButtonChangeMillis = millis();
+    const uint32_t now = millis();
+    lastButtonChangeMillis = now;
+    lastSampleMillis = now;
     pressCount = 0;
 }
 
@@ -71,9 +77,9 @@ bool Button::isButtonPressed() {
     circularBuffer = (circularBuffer << 1)
                      | (digitalRead(USER_BUTTON) == USER_BUTTON_ACTIVE_LEVEL);
 
-    uint8_t popCount = __builtin_popcount(circularBuffer);
+    const uint8_t popCount = __builtin_popcount(circularBuffer);
 
-    return popCount > 16;
+    return popCount > 12;  // Require at least 13 out of 16 samples to be high
 }
 
 void Button::onLongPress(std::function<void()> callback) {
@@ -91,13 +97,13 @@ void Button::attach() {
 }
 
 void Button::invokeLongPressCallbacks() {
-    for (auto &callback : longPressCallbacks) {
+    for (const auto &callback : longPressCallbacks) {
         callback();
     }
 }
 
 void Button::invokeMultiPressCallbacks(size_t pressCount) {
-    for (auto &callback : multiPressCallbacks) {
+    for (const auto &callback : multiPressCallbacks) {
         callback(pressCount);
     }
 }

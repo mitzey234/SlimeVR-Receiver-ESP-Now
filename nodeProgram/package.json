@@ -1,0 +1,16 @@
+{
+  "name": "dongle-manager",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "Mitzey",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "esp-ota": "^1.2.0",
+    "serialport": "^13.0.0"
+  }
+}

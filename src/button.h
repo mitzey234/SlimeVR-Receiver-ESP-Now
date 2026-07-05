@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional>
 #include <vector>
+#include "Serial.h"
 
 class Button {
 public:
@@ -30,12 +31,14 @@ private:
     bool polling{false};
     bool lastButtonState = false;
     uint32_t lastButtonChangeMillis{0};
+    uint32_t lastSampleMillis{0};
     uint32_t pressCount = 0;
 
     uint32_t circularBuffer{0};
 
-    static constexpr float longPressSeconds{2.0f};
-    static constexpr float multiPressMaxDelaySeconds{1.0f};
+    static constexpr float longPressSeconds{5.0f};
+    static constexpr float multiPressMaxDelaySeconds{0.125f};
+    static constexpr uint8_t minDebounceTimeMs{50};
 
     friend void button_isr();
 };
